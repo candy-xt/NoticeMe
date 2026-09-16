@@ -115,6 +115,7 @@ class NoticeManager:
         level: str = "info",
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
+        channel_ids: Optional[list[str]] = None,
     ) -> RealtimeNotification:
         """Create or update a real-time notification and broadcast via WebSocket."""
         existing = db.get_realtime(notification_id)
@@ -145,8 +146,10 @@ class NoticeManager:
         )
         self._broadcast_ws(event)
 
-        # Route to channels if source has mappings
-        if source_id:
+        # Route to channels
+        if channel_ids:
+            await self._push_to_channels(channel_ids, title, content, level, extra)
+        elif source_id:
             await self._route_to_channels(source_id, title, content, level, extra)
 
         return notif
@@ -237,6 +240,7 @@ class NoticeManager:
         level: str = "info",
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
+        channel_ids: Optional[list[str]] = None,
     ) -> list[PushResult]:
         """Push a regular (fire-and-forget) notification to all mapped channels."""
         # Record in history
@@ -262,7 +266,9 @@ class NoticeManager:
 
         # Route to channels
         results: list[PushResult] = []
-        if source_id:
+        if channel_ids:
+            results = await self._push_to_channels(channel_ids, title, content, level, extra)
+        elif source_id:
             results = await self._route_to_channels(source_id, title, content, level, extra)
 
         return results
@@ -318,6 +324,23 @@ class NoticeManager:
             asyncio.create_task(
                 self.push_regular(title, content, level, source_id, extra)
             )
+
+    async def _push_to_channels(
+        self,
+        channel_ids: list[str],
+        title: str,
+        content: str,
+        level: str,
+        extra: Optional[dict[str, Any]],
+    ) -> list[PushResult]:
+        """Push a notification to specific channels by ID."""
+        results: list[PushResult] = []
+        for cid in channel_ids:
+            ch = db.get_channel(cid)
+            if ch and ch.enabled:
+                result = await self.channel_mgr.push(ch, title, content, level, extra)
+                results.append(result)
+        return results
 
     async def _route_to_channels(
         self,

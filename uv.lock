@@ -417,7 +417,6 @@ wheels = [
 
 [[package]]
 name = "noticeme-srv"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiomqtt" },

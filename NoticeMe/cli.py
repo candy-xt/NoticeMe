@@ -243,9 +243,10 @@ def channel_remove(channel_id: str):
 @click.option("--content", "-c", default="", help="Notification content")
 @click.option("--level", "-l", default="info", type=click.Choice(["info", "success", "warning", "error"]))
 @click.option("--source", "-s", help="Source ID (for channel routing)")
+@click.option("--channel", "-ch", multiple=True, help="Channel ID(s) to push directly (can repeat)")
 @click.option("--extra", help="Extra data as JSON string")
 def notify(notif_id: str | None, title: str, content: str, level: str,
-           source: str | None, extra: str | None):
+           source: str | None, channel: tuple[str, ...], extra: str | None):
     """Push a notification (real-time if --id given, regular otherwise)."""
     from .core.models import WSEvent
 
@@ -262,12 +263,13 @@ def notify(notif_id: str | None, title: str, content: str, level: str,
         from .core.manager import NoticeManager
         mgr = NoticeManager()
         await mgr.start()
+        ch_ids = list(channel) if channel else None
         try:
             if notif_id:
-                notif = await mgr.push_realtime(notif_id, title, content, level, source, extra_data)
+                notif = await mgr.push_realtime(notif_id, title, content, level, source, extra_data, channel_ids=ch_ids)
                 click.echo(f"Pushed real-time notification: {notif.id}")
             else:
-                results = await mgr.push_regular(title, content, level, source, extra_data)
+                results = await mgr.push_regular(title, content, level, source, extra_data, channel_ids=ch_ids)
                 click.echo(f"Pushed regular notification (channels: {len(results)})")
         finally:
             await mgr.stop()
