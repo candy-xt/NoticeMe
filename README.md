@@ -41,6 +41,8 @@ nme serve --host 0.0.0.0 --port 8200 --reload
 
 访问: `http://localhost:8200`
 
+数据存储在 `~/.noticeme/` (SQLite 数据库)
+
 ## CLI 命令
 
 ```bash
@@ -217,7 +219,7 @@ NoticeMe/
 │   └── manager.py         # 核心调度管理器
 ├── static/
 │   └── index.html         # Web UI (Alpine.js + Tailwind)
-├── data/                  # 配置和数据目录
+├── ~/.noticeme/           # 运行时数据 (数据库, 配置)
 ├── .github/workflows/
 │   └── release.yml        # CI/CD (tag → GitHub Release + PyPI)
 ├── pyproject.toml         # 包配置

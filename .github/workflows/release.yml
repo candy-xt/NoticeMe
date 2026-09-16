@@ -98,5 +98,7 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        # Uses OIDC trusted publisher — no API token needed
-        # Configure at: https://pypi.org/manage/project/noticeme-cli/settings/publishing/
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+        # 1. 在 PyPI 上生成 API token: https://pypi.org/manage/account/token/
+        # 2. 在 GitHub repo Settings → Secrets → Actions 中添加 PYPI_API_TOKEN
