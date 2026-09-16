@@ -17,7 +17,8 @@ from .core.manager import manager
 from .core.models import (
     ChannelCreate,
     ChannelUpdate,
-    MappingCreate,
+    GroupCreate,
+    GroupUpdate,
     RealtimeUpdate,
     SourceCreate,
     SourceUpdate,
@@ -100,18 +101,18 @@ def _register_routes(app: FastAPI) -> None:
             raise HTTPException(404, "Source not found")
         return {"ok": True}
 
-    @app.get("/api/sources/{source_id}/channels")
-    async def api_get_source_channels(source_id: str):
+    @app.get("/api/sources/{source_id}/groups")
+    async def api_get_source_groups(source_id: str):
         if not manager.get_source(source_id):
             raise HTTPException(404, "Source not found")
-        channel_ids = manager.get_source_channels(source_id)
-        return {"ok": True, "data": channel_ids}
+        group_ids = manager.get_source_groups(source_id)
+        return {"ok": True, "data": group_ids}
 
-    @app.put("/api/sources/{source_id}/channels")
-    async def api_set_source_channels(source_id: str, body: MappingCreate):
+    @app.put("/api/sources/{source_id}/groups")
+    async def api_set_source_groups(source_id: str, body: dict[str, Any]):
         if not manager.get_source(source_id):
             raise HTTPException(404, "Source not found")
-        manager.set_source_channels(source_id, body.channel_ids)
+        manager.set_source_groups(source_id, body.get("group_ids", []))
         return {"ok": True}
 
     # ── Channels ───────────────────────────────────────────────
@@ -146,6 +147,52 @@ def _register_routes(app: FastAPI) -> None:
             raise HTTPException(404, "Channel not found")
         return {"ok": True}
 
+    # ── Groups ─────────────────────────────────────────────────
+
+    @app.get("/api/groups")
+    async def api_list_groups():
+        groups = manager.list_groups()
+        return {"ok": True, "data": [g.model_dump() for g in groups]}
+
+    @app.post("/api/groups")
+    async def api_create_group(body: GroupCreate):
+        g = manager.create_group(body)
+        return {"ok": True, "data": g.model_dump()}
+
+    @app.get("/api/groups/{group_id}")
+    async def api_get_group(group_id: str):
+        g = manager.get_group(group_id)
+        if not g:
+            raise HTTPException(404, "Group not found")
+        return {"ok": True, "data": g.model_dump()}
+
+    @app.put("/api/groups/{group_id}")
+    async def api_update_group(group_id: str, body: GroupUpdate):
+        g = manager.update_group(group_id, body)
+        if not g:
+            raise HTTPException(404, "Group not found")
+        return {"ok": True, "data": g.model_dump()}
+
+    @app.delete("/api/groups/{group_id}")
+    async def api_delete_group(group_id: str):
+        if not manager.delete_group(group_id):
+            raise HTTPException(404, "Group not found")
+        return {"ok": True}
+
+    @app.get("/api/groups/{group_id}/channels")
+    async def api_get_group_channels(group_id: str):
+        if not manager.get_group(group_id):
+            raise HTTPException(404, "Group not found")
+        channel_ids = manager.get_group_channels(group_id)
+        return {"ok": True, "data": channel_ids}
+
+    @app.put("/api/groups/{group_id}/channels")
+    async def api_set_group_channels(group_id: str, body: dict[str, Any]):
+        if not manager.get_group(group_id):
+            raise HTTPException(404, "Group not found")
+        manager.set_group_channels(group_id, body.get("channel_ids", []))
+        return {"ok": True}
+
     # ── Notifications ──────────────────────────────────────────
 
     @app.get("/api/notifications/realtime")
@@ -171,8 +218,9 @@ def _register_routes(app: FastAPI) -> None:
             raise HTTPException(400, "title is required")
         level = body.get("level", "info")
         source_id = body.get("source_id")
+        group_ids = body.get("group_ids")
         extra = body.get("extra", {})
-        notif = await manager.push_realtime(nid, title, content, level, source_id, extra)
+        notif = await manager.push_realtime(nid, title, content, level, source_id, extra, group_ids=group_ids)
         return {"ok": True, "data": notif.model_dump()}
 
     @app.put("/api/notifications/realtime/{notification_id}")
@@ -201,8 +249,9 @@ def _register_routes(app: FastAPI) -> None:
             raise HTTPException(400, "title is required")
         level = body.get("level", "info")
         source_id = body.get("source_id")
+        group_ids = body.get("group_ids")
         extra = body.get("extra", {})
-        results = await manager.push_regular(title, content, level, source_id, extra)
+        results = await manager.push_regular(title, content, level, source_id, extra, group_ids=group_ids)
         return {"ok": True, "data": [r.model_dump() for r in results]}
 
     # ── History ────────────────────────────────────────────────

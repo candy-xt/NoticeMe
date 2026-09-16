@@ -128,15 +128,15 @@ def source_remove(source_id: str):
 
 @source.command("map")
 @click.argument("source_id")
-@click.argument("channel_ids", nargs=-1)
-def source_map(source_id: str, channel_ids: tuple[str, ...]):
-    """Map channels to a source. Usage: nme source map <source_id> <ch1> <ch2> ..."""
+@click.argument("group_ids", nargs=-1)
+def source_map(source_id: str, group_ids: tuple[str, ...]):
+    """Map groups to a source. Usage: nme source map <source_id> <group1> <group2> ..."""
     db.init_db()
     if not db.get_source(source_id):
         click.echo(f"Source {source_id} not found", err=True)
         sys.exit(1)
-    db.set_source_channels(source_id, list(channel_ids))
-    click.echo(f"Mapped source {source_id} → channels {list(channel_ids)}")
+    db.set_source_groups(source_id, list(group_ids))
+    click.echo(f"Mapped source {source_id} → groups {list(group_ids)}")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -233,6 +233,70 @@ def channel_remove(channel_id: str):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  group — manage notification groups
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+@main.group()
+def group():
+    """Manage notification groups."""
+    pass
+
+
+@group.command("list")
+def group_list():
+    """List all notification groups."""
+    db.init_db()
+    groups = db.list_groups()
+    if not groups:
+        click.echo("No groups configured.")
+        return
+    for g in groups:
+        status = "✓" if g.enabled else "✗"
+        ch_count = len(g.channel_ids)
+        desc = f"  {g.description}" if g.description else ""
+        click.echo(f"  [{status}] {g.id}  {g.name}  ({ch_count} channels){desc}")
+
+
+@group.command("add")
+@click.option("--name", "-n", required=True, help="Group name")
+@click.option("--description", "-d", default="", help="Group description")
+@click.option("--disabled", is_flag=True, help="Create in disabled state")
+def group_add(name: str, description: str, disabled: bool):
+    """Add a new notification group."""
+    from .core.models import GroupCreate
+    db.init_db()
+    data = GroupCreate(name=name, description=description, enabled=not disabled)
+    g = db.create_group(data)
+    click.echo(f"Created group: {g.id} ({g.name})")
+
+
+@group.command("remove")
+@click.argument("group_id")
+def group_remove(group_id: str):
+    """Remove a notification group."""
+    db.init_db()
+    if db.delete_group(group_id):
+        click.echo(f"Removed group {group_id}")
+    else:
+        click.echo(f"Group {group_id} not found", err=True)
+        sys.exit(1)
+
+
+@group.command("map")
+@click.argument("group_id")
+@click.argument("channel_ids", nargs=-1)
+def group_map(group_id: str, channel_ids: tuple[str, ...]):
+    """Map channels to a group. Usage: nme group map <group_id> <ch1> <ch2> ..."""
+    db.init_db()
+    if not db.get_group(group_id):
+        click.echo(f"Group {group_id} not found", err=True)
+        sys.exit(1)
+    db.set_group_channels(group_id, list(channel_ids))
+    click.echo(f"Mapped group {group_id} → channels {list(channel_ids)}")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  notify — push notifications from CLI
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -243,10 +307,10 @@ def channel_remove(channel_id: str):
 @click.option("--content", "-c", default="", help="Notification content")
 @click.option("--level", "-l", default="info", type=click.Choice(["info", "success", "warning", "error"]))
 @click.option("--source", "-s", help="Source ID (for channel routing)")
-@click.option("--channel", "-ch", multiple=True, help="Channel ID(s) to push directly (can repeat)")
+@click.option("--group", "-g", multiple=True, help="Group ID(s) to push to (can repeat)")
 @click.option("--extra", help="Extra data as JSON string")
 def notify(notif_id: str | None, title: str, content: str, level: str,
-           source: str | None, channel: tuple[str, ...], extra: str | None):
+           source: str | None, group: tuple[str, ...], extra: str | None):
     """Push a notification (real-time if --id given, regular otherwise)."""
     from .core.models import WSEvent
 
@@ -263,14 +327,20 @@ def notify(notif_id: str | None, title: str, content: str, level: str,
         from .core.manager import NoticeManager
         mgr = NoticeManager()
         await mgr.start()
-        ch_ids = list(channel) if channel else None
+        grp_ids = list(group) if group else None
         try:
             if notif_id:
-                notif = await mgr.push_realtime(notif_id, title, content, level, source, extra_data, channel_ids=ch_ids)
+                notif = await mgr.push_realtime(notif_id, title, content, level, source, extra_data, group_ids=grp_ids)
                 click.echo(f"Pushed real-time notification: {notif.id}")
             else:
-                results = await mgr.push_regular(title, content, level, source, extra_data, channel_ids=ch_ids)
-                click.echo(f"Pushed regular notification (channels: {len(results)})")
+                results = await mgr.push_regular(title, content, level, source, extra_data, group_ids=grp_ids)
+                if not results:
+                    click.echo("Pushed notification (no channels to route to)")
+                else:
+                    for r in results:
+                        status = "✓" if r.ok else "✗"
+                        detail = f"  {r.detail}" if r.detail else ""
+                        click.echo(f"  [{status}] {r.channel}{detail}")
         finally:
             await mgr.stop()
 

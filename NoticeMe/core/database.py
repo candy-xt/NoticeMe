@@ -13,6 +13,9 @@ from .models import (
     ChannelInfo,
     ChannelCreate,
     ChannelUpdate,
+    GroupInfo,
+    GroupCreate,
+    GroupUpdate,
     HistoryEntry,
     RealtimeNotification,
     SourceInfo,
@@ -43,11 +46,27 @@ CREATE TABLE IF NOT EXISTS channels (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS source_channels (
-    source_id  TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS groups (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    enabled     INTEGER DEFAULT 1,
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS source_groups (
+    source_id TEXT NOT NULL,
+    group_id  TEXT NOT NULL,
+    PRIMARY KEY (source_id, group_id),
+    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id)  REFERENCES groups(id)  ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS group_channels (
+    group_id   TEXT NOT NULL,
     channel_id TEXT NOT NULL,
-    PRIMARY KEY (source_id, channel_id),
-    FOREIGN KEY (source_id)  REFERENCES sources(id)  ON DELETE CASCADE,
+    PRIMARY KEY (group_id, channel_id),
+    FOREIGN KEY (group_id)   REFERENCES groups(id)   ON DELETE CASCADE,
     FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
 );
 
@@ -285,43 +304,149 @@ def delete_channel(channel_id: str) -> bool:
         conn.close()
 
 
-# ── Source ↔ Channel Mappings ───────────────────────────────────────────
+# ── Groups ─────────────────────────────────────────────────────────────
 
-def get_source_channels(source_id: str) -> list[str]:
+def _row_to_group(row: sqlite3.Row) -> GroupInfo:
+    return GroupInfo(
+        id=row["id"],
+        name=row["name"],
+        description=row["description"],
+        enabled=bool(row["enabled"]),
+        channel_ids=get_group_channels(row["id"]),
+        created_at=row["created_at"],
+    )
+
+
+def list_groups() -> list[GroupInfo]:
+    conn = _get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM groups ORDER BY created_at").fetchall()
+        return [_row_to_group(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_group(group_id: str) -> Optional[GroupInfo]:
+    conn = _get_conn()
+    try:
+        row = conn.execute("SELECT * FROM groups WHERE id = ?", (group_id,)).fetchone()
+        return _row_to_group(row) if row else None
+    finally:
+        conn.close()
+
+
+def create_group(data: GroupCreate) -> GroupInfo:
+    gid = _new_id()
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "INSERT INTO groups (id, name, description, enabled) VALUES (?,?,?,?)",
+            (gid, data.name, data.description, int(data.enabled)),
+        )
+        conn.commit()
+        return get_group(gid)  # type: ignore
+    finally:
+        conn.close()
+
+
+def update_group(group_id: str, data: GroupUpdate) -> Optional[GroupInfo]:
+    existing = get_group(group_id)
+    if not existing:
+        return None
+    conn = _get_conn()
+    try:
+        fields: list[str] = []
+        values: list[Any] = []
+        if data.name is not None:
+            fields.append("name = ?")
+            values.append(data.name)
+        if data.description is not None:
+            fields.append("description = ?")
+            values.append(data.description)
+        if data.enabled is not None:
+            fields.append("enabled = ?")
+            values.append(int(data.enabled))
+        if not fields:
+            return existing
+        values.append(group_id)
+        conn.execute(f"UPDATE groups SET {', '.join(fields)} WHERE id = ?", values)
+        conn.commit()
+        return get_group(group_id)
+    finally:
+        conn.close()
+
+
+def delete_group(group_id: str) -> bool:
+    conn = _get_conn()
+    try:
+        cur = conn.execute("DELETE FROM groups WHERE id = ?", (group_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+# ── Group ↔ Channel Mappings ───────────────────────────────────────────
+
+def get_group_channels(group_id: str) -> list[str]:
     conn = _get_conn()
     try:
         rows = conn.execute(
-            "SELECT channel_id FROM source_channels WHERE source_id = ?", (source_id,)
+            "SELECT channel_id FROM group_channels WHERE group_id = ?", (group_id,)
         ).fetchall()
         return [r["channel_id"] for r in rows]
     finally:
         conn.close()
 
 
-def set_source_channels(source_id: str, channel_ids: list[str]) -> None:
+def set_group_channels(group_id: str, channel_ids: list[str]) -> None:
     conn = _get_conn()
     try:
-        conn.execute("DELETE FROM source_channels WHERE source_id = ?", (source_id,))
+        conn.execute("DELETE FROM group_channels WHERE group_id = ?", (group_id,))
         for cid in channel_ids:
             conn.execute(
-                "INSERT OR IGNORE INTO source_channels (source_id, channel_id) VALUES (?,?)",
-                (source_id, cid),
+                "INSERT OR IGNORE INTO group_channels (group_id, channel_id) VALUES (?,?)",
+                (group_id, cid),
             )
         conn.commit()
     finally:
         conn.close()
 
 
-def get_all_mappings() -> dict[str, list[str]]:
+# ── Source ↔ Group Mappings ────────────────────────────────────────────
+
+def get_source_groups(source_id: str) -> list[str]:
     conn = _get_conn()
     try:
-        rows = conn.execute("SELECT source_id, channel_id FROM source_channels").fetchall()
-        result: dict[str, list[str]] = {}
-        for r in rows:
-            result.setdefault(r["source_id"], []).append(r["channel_id"])
-        return result
+        rows = conn.execute(
+            "SELECT group_id FROM source_groups WHERE source_id = ?", (source_id,)
+        ).fetchall()
+        return [r["group_id"] for r in rows]
     finally:
         conn.close()
+
+
+def set_source_groups(source_id: str, group_ids: list[str]) -> None:
+    conn = _get_conn()
+    try:
+        conn.execute("DELETE FROM source_groups WHERE source_id = ?", (source_id,))
+        for gid in group_ids:
+            conn.execute(
+                "INSERT OR IGNORE INTO source_groups (source_id, group_id) VALUES (?,?)",
+                (source_id, gid),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_source_channels(source_id: str) -> list[str]:
+    """Get all channel IDs for a source via its group mappings."""
+    group_ids = get_source_groups(source_id)
+    channel_ids: list[str] = []
+    for gid in group_ids:
+        channel_ids.extend(get_group_channels(gid))
+    return list(set(channel_ids))
 
 
 # ── Real-time Notifications ────────────────────────────────────────────

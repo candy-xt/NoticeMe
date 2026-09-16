@@ -86,9 +86,9 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "source_id": {"type": "string"},
-                "channel_ids": {"type": "array", "items": {"type": "string"}},
+                "group_ids": {"type": "array", "items": {"type": "string"}},
             },
-            "required": ["source_id", "channel_ids"],
+            "required": ["source_id", "group_ids"],
         },
     ),
     types.Tool(
@@ -107,7 +107,7 @@ TOOLS: list[types.Tool] = [
                 "content": {"type": "string", "default": ""},
                 "level": {"type": "string", "enum": ["info", "success", "warning", "error"], "default": "info"},
                 "source_id": {"type": "string", "description": "Optional source ID for channel routing"},
-                "channel_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to specific channel IDs directly"},
+                "group_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to specific group IDs"},
                 "extra": {"type": "object", "description": "Extra metadata"},
             },
             "required": ["id", "title"],
@@ -147,7 +147,7 @@ TOOLS: list[types.Tool] = [
                 "content": {"type": "string", "default": ""},
                 "level": {"type": "string", "enum": ["info", "success", "warning", "error"], "default": "info"},
                 "source_id": {"type": "string", "description": "Optional source ID for channel routing"},
-                "channel_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to specific channel IDs directly"},
+                "group_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to specific group IDs"},
             },
             "required": ["title"],
         },
@@ -227,7 +227,7 @@ async def _dispatch(name: str, args: dict[str, Any]) -> Any:
                 notification_id=args["id"], title=args["title"],
                 content=args.get("content", ""), level=args.get("level", "info"),
                 source_id=args.get("source_id"), extra=args.get("extra"),
-                channel_ids=args.get("channel_ids"),
+                group_ids=args.get("group_ids"),
             )
             return notif.model_dump()
         finally:
@@ -254,7 +254,7 @@ async def _dispatch(name: str, args: dict[str, Any]) -> Any:
             results = await mgr.push_regular(
                 title=args["title"], content=args.get("content", ""),
                 level=args.get("level", "info"), source_id=args.get("source_id"),
-                channel_ids=args.get("channel_ids"),
+                group_ids=args.get("group_ids"),
             )
             return [r.model_dump() for r in results]
         finally:

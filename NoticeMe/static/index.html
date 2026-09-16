@@ -188,7 +188,7 @@
               <button @click="editSource(s)"
                 class="flex-1 px-3 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 text-gray-600 dark:text-gray-300 text-xs font-medium rounded-lg transition-colors">编辑</button>
               <button @click="showMapping(s)"
-                class="flex-1 px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent-glow text-xs font-medium rounded-lg transition-colors">渠道</button>
+                class="flex-1 px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent-glow text-xs font-medium rounded-lg transition-colors">通知组</button>
               <button @click="deleteSource(s.id)"
                 class="px-2 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-danger/20 text-gray-400 hover:text-danger text-xs rounded-lg transition-colors">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
@@ -234,6 +234,50 @@
               <button @click="editChannel(c)"
                 class="flex-1 px-3 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 text-gray-600 dark:text-gray-300 text-xs font-medium rounded-lg transition-colors">编辑</button>
               <button @click="deleteChannel(c.id)"
+                class="px-2 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-danger/20 text-gray-400 hover:text-danger text-xs rounded-lg transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ═══ Groups Tab ═══ -->
+    <div x-show="currentTab === 'groups'">
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">通知组</h2>
+        <button @click="showGroupForm = true; resetGroupForm()"
+          class="px-4 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+          添加通知组
+        </button>
+      </div>
+
+      <div x-show="groups.length === 0" class="text-center py-16 text-gray-400 dark:text-gray-500">
+        <p class="text-sm">还没有通知组</p>
+        <p class="text-xs mt-1">通知组用于将渠道分组，通知源通过通知组路由到渠道</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="g in groups" :key="g.id">
+          <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl p-5 card-enter hover:border-lsurface-4 dark:hover:border-surface-4 transition-colors">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="g.enabled ? 'bg-success shadow-[0_0_6px_#22c55e88]' : 'bg-gray-500'"></span>
+                <h3 class="font-semibold text-gray-900 dark:text-white truncate" x-text="g.name"></h3>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-accent/15 text-accent-glow" x-text="g.channel_ids.length + ' 渠道'"></span>
+            </div>
+            <div x-show="g.description" class="bg-lsurface dark:bg-surface rounded-lg px-3 py-2 mb-3">
+              <p class="text-xs text-gray-400 dark:text-gray-400" x-text="g.description"></p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="editGroup(g)"
+                class="flex-1 px-3 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 text-gray-600 dark:text-gray-300 text-xs font-medium rounded-lg transition-colors">编辑</button>
+              <button @click="showGroupChannelMapping(g)"
+                class="flex-1 px-3 py-1.5 bg-warn/15 hover:bg-warn/25 text-warn text-xs font-medium rounded-lg transition-colors">渠道</button>
+              <button @click="deleteGroup(g.id)"
                 class="px-2 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-danger/20 text-gray-400 hover:text-danger text-xs rounded-lg transition-colors">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
               </button>
@@ -315,6 +359,21 @@
             <option value="warning">警告</option>
             <option value="error">错误</option>
           </select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">推送到通知组 <span class="text-gray-400 dark:text-gray-600">（不选则不发送到任何渠道）</span></label>
+          <div x-show="groups.length > 0" class="space-y-1 max-h-32 overflow-y-auto scroll-thin">
+            <template x-for="g in groups" :key="g.id">
+              <label class="flex items-center gap-2 p-2 rounded-lg hover:bg-lsurface-3 dark:hover:bg-surface-3 cursor-pointer transition-colors">
+                <input type="checkbox" :value="g.id" x-model="pushForm.groupIds"
+                  class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
+                <span class="w-2 h-2 rounded-full flex-shrink-0" :class="g.enabled ? 'bg-success' : 'bg-gray-500'"></span>
+                <span class="text-sm text-gray-700 dark:text-gray-300" x-text="g.name"></span>
+                <span class="text-xs text-gray-400" x-text="'(' + g.channel_ids.length + ' 渠道)'"></span>
+              </label>
+            </template>
+          </div>
+          <p x-show="groups.length === 0" class="text-xs text-gray-400">暂无可用通知组，请先创建</p>
         </div>
       </div>
       <div class="flex justify-end gap-3 mt-6">
@@ -480,15 +539,40 @@
     </div>
   </div>
 
-  <!-- ═══ Mapping Modal ═══ -->
-  <div x-show="showMappingModal" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showMappingModal = false">
+  <!-- ═══ Group Form Modal ═══ -->
+  <div x-show="showGroupForm" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showGroupForm = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5" x-text="groupForm._edit ? '编辑通知组' : '添加通知组'"></h2>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">名称</label>
+          <input x-model="groupForm.name" placeholder="如: 服务器告警" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">描述（可选）</label>
+          <input x-model="groupForm.description" placeholder="组描述" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" x-model="groupForm.enabled" id="grp_enabled" class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
+          <label for="grp_enabled" class="text-sm text-gray-600 dark:text-gray-300">启用</label>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button @click="showGroupForm = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
+        <button @click="doSaveGroup()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors" x-text="groupForm._edit ? '保存' : '添加'"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Group Channel Mapping Modal ═══ -->
+  <div x-show="showGroupChModal" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showGroupChModal = false">
     <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
-      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">配置渠道映射</h2>
-      <p class="text-xs text-gray-400 mb-5">选择 <span class="text-accent font-medium" x-text="mappingSource?.name"></span> 的通知渠道</p>
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">配置通知组渠道</h2>
+      <p class="text-xs text-gray-400 mb-5">选择 <span class="text-accent font-medium" x-text="groupChSource?.name"></span> 包含的渠道</p>
       <div class="space-y-2 max-h-60 overflow-y-auto scroll-thin">
         <template x-for="c in channels" :key="c.id">
           <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-lsurface-3 dark:hover:bg-surface-3 cursor-pointer transition-colors">
-            <input type="checkbox" :value="c.id" x-model="mappingSelected"
+            <input type="checkbox" :value="c.id" x-model="groupChSelected"
               class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
             <div class="min-w-0">
               <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="c.name"></p>
@@ -499,6 +583,33 @@
       </div>
       <div x-show="channels.length === 0" class="text-center py-8 text-gray-400 text-sm">
         还没有渠道，请先创建
+      </div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button @click="showGroupChModal = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
+        <button @click="doSaveGroupChannels()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Mapping Modal (Source → Group) ═══ -->
+  <div x-show="showMappingModal" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showMappingModal = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">配置通知源映射</h2>
+      <p class="text-xs text-gray-400 mb-5">选择 <span class="text-accent font-medium" x-text="mappingSource?.name"></span> 使用的通知组</p>
+      <div class="space-y-2 max-h-60 overflow-y-auto scroll-thin">
+        <template x-for="g in groups" :key="g.id">
+          <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-lsurface-3 dark:hover:bg-surface-3 cursor-pointer transition-colors">
+            <input type="checkbox" :value="g.id" x-model="mappingSelected"
+              class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="g.name"></p>
+              <p class="text-xs text-gray-400" x-text="g.channel_ids.length + ' 渠道'"></p>
+            </div>
+          </label>
+        </template>
+      </div>
+      <div x-show="groups.length === 0" class="text-center py-8 text-gray-400 text-sm">
+        还没有通知组，请先创建
       </div>
       <div class="flex justify-end gap-3 mt-6">
         <button @click="showMappingModal = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
@@ -514,6 +625,7 @@
         tabs: [
           { id: 'dashboard', label: '仪表盘' },
           { id: 'sources',   label: '通知源' },
+          { id: 'groups',    label: '通知组' },
           { id: 'channels',  label: '通知渠道' },
           { id: 'history',   label: '历史记录' },
         ],
@@ -523,6 +635,7 @@
         // Data
         realtimeNotifs: [],
         sources: [],
+        groups: [],
         channels: [],
         history: [],
 
@@ -534,13 +647,15 @@
         showPush: false,
         showEditRT: false,
         showSourceForm: false,
+        showGroupForm: false,
         showChannelForm: false,
         showMappingModal: false,
 
         // Forms
-        pushForm: { type: 'regular', id: '', title: '', content: '', level: 'info' },
+        pushForm: { type: 'regular', id: '', title: '', content: '', level: 'info', groupIds: [] },
         editRTForm: { id: '', title: '', content: '', level: 'info' },
         sourceForm: { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', username: '', password: '' },
+        groupForm: { _edit: null, name: '', description: '', enabled: true },
         channelForm: { _edit: null, name: '', type: 'api', enabled: true, url: '', method: 'POST', headersStr: '', bodyTemplate: '', broker: '', port: '1883', topic: '', username: '', password: '' },
         mappingSource: null,
         mappingSelected: [],
@@ -604,13 +719,15 @@
         // ── Refresh ───────────────────────────────────────────
         async refresh() {
           try {
-            const [rt, src, ch] = await Promise.all([
+            const [rt, src, grp, ch] = await Promise.all([
               fetch('/api/notifications/realtime').then(r => r.json()),
               fetch('/api/sources').then(r => r.json()),
+              fetch('/api/groups').then(r => r.json()),
               fetch('/api/channels').then(r => r.json()),
             ]);
             if (rt.ok) this.realtimeNotifs = rt.data;
             if (src.ok) this.sources = src.data;
+            if (grp.ok) this.groups = grp.data;
             if (ch.ok) this.channels = ch.data;
           } catch (e) { /* ignore */ }
         },
@@ -626,31 +743,31 @@
         // ── Push ──────────────────────────────────────────────
         async doPush() {
           if (!this.pushForm.title) return;
+          const payload = {
+            title: this.pushForm.title,
+            content: this.pushForm.content,
+            level: this.pushForm.level,
+          };
+          if (this.pushForm.groupIds.length > 0) {
+            payload.group_ids = this.pushForm.groupIds;
+          }
           if (this.pushForm.type === 'realtime') {
             if (!this.pushForm.id) return;
+            payload.id = this.pushForm.id;
             await fetch('/api/notifications/realtime', {
               method: 'POST',
               headers: {'Content-Type':'application/json'},
-              body: JSON.stringify({
-                id: this.pushForm.id,
-                title: this.pushForm.title,
-                content: this.pushForm.content,
-                level: this.pushForm.level,
-              }),
+              body: JSON.stringify(payload),
             });
           } else {
             await fetch('/api/notifications/push', {
               method: 'POST',
               headers: {'Content-Type':'application/json'},
-              body: JSON.stringify({
-                title: this.pushForm.title,
-                content: this.pushForm.content,
-                level: this.pushForm.level,
-              }),
+              body: JSON.stringify(payload),
             });
           }
           this.showPush = false;
-          this.pushForm = { type: 'regular', id: '', title: '', content: '', level: 'info' };
+          this.pushForm = { type: 'regular', id: '', title: '', content: '', level: 'info', groupIds: [] };
           await this.refresh();
         },
 
@@ -732,6 +849,53 @@
           await this.refresh();
         },
 
+        // ── Group CRUD ────────────────────────────────────────
+        resetGroupForm() {
+          this.groupForm = { _edit: null, name: '', description: '', enabled: true };
+        },
+        editGroup(g) {
+          this.groupForm = { _edit: g.id, name: g.name, description: g.description || '', enabled: g.enabled };
+          this.showGroupForm = true;
+        },
+        async doSaveGroup() {
+          const body = { name: this.groupForm.name, description: this.groupForm.description, enabled: this.groupForm.enabled };
+          if (this.groupForm._edit) {
+            await fetch(`/api/groups/${this.groupForm._edit}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          } else {
+            await fetch('/api/groups', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          }
+          this.showGroupForm = false;
+          await this.refresh();
+        },
+        async deleteGroup(id) {
+          if (!confirm('确定删除此通知组？')) return;
+          await fetch(`/api/groups/${id}`, { method: 'DELETE' });
+          await this.refresh();
+        },
+
+        // ── Group Channel Mapping ─────────────────────────────
+        showGroupChModal: false,
+        groupChSource: null,
+        groupChSelected: [],
+        async showGroupChannelMapping(g) {
+          this.groupChSource = g;
+          this.groupChSelected = [];
+          try {
+            const r = await fetch(`/api/groups/${g.id}/channels`);
+            const j = await r.json();
+            if (j.ok) this.groupChSelected = j.data;
+          } catch(e) {}
+          this.showGroupChModal = true;
+        },
+        async doSaveGroupChannels() {
+          await fetch(`/api/groups/${this.groupChSource.id}/channels`, {
+            method: 'PUT', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ channel_ids: this.groupChSelected }),
+          });
+          this.showGroupChModal = false;
+          await this.refresh();
+        },
+
         // ── Channel CRUD ──────────────────────────────────────
         resetChannelForm() {
           this.channelForm = { _edit: null, name: '', type: 'api', enabled: true, url: '', method: 'POST', headersStr: '', bodyTemplate: '', broker: '', port: '1883', topic: '', username: '', password: '' };
@@ -794,24 +958,25 @@
           await this.refresh();
         },
 
-        // ── Mapping ───────────────────────────────────────────
+        // ── Mapping (Source → Group) ──────────────────────────
         async showMapping(s) {
           this.mappingSource = s;
           this.mappingSelected = [];
           try {
-            const r = await fetch(`/api/sources/${s.id}/channels`);
+            const r = await fetch(`/api/sources/${s.id}/groups`);
             const j = await r.json();
             if (j.ok) this.mappingSelected = j.data;
           } catch(e) {}
           this.showMappingModal = true;
         },
         async doSaveMapping() {
-          await fetch(`/api/sources/${this.mappingSource.id}/channels`, {
+          await fetch(`/api/sources/${this.mappingSource.id}/groups`, {
             method: 'PUT',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ source_id: this.mappingSource.id, channel_ids: this.mappingSelected }),
+            body: JSON.stringify({ group_ids: this.mappingSelected }),
           });
           this.showMappingModal = false;
+          await this.refresh();
         },
 
         // ── History ───────────────────────────────────────────

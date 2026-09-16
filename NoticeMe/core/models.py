@@ -90,15 +90,39 @@ class ChannelInfo(ChannelBase):
     created_at: str
 
 
-# ── Source ↔ Channel Mapping ────────────────────────────────────────────
+# ── Group ──────────────────────────────────────────────────────────────
 
-class MappingCreate(BaseModel):
+class GroupBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str = ""
+    enabled: bool = True
+
+
+class GroupCreate(GroupBase):
+    pass
+
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class GroupInfo(GroupBase):
+    id: str
+    channel_ids: list[str] = Field(default_factory=list)
+    created_at: str
+
+
+# ── Source ↔ Group Mapping ────────────────────────────────────────────
+
+class SourceGroupMapping(BaseModel):
     source_id: str
-    channel_ids: list[str]
+    group_id: str
 
 
-class MappingInfo(BaseModel):
-    source_id: str
+class GroupChannelMapping(BaseModel):
+    group_id: str
     channel_ids: list[str]
 
 

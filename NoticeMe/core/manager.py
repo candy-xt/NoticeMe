@@ -13,6 +13,8 @@ from .channels import ChannelManager
 from .models import (
     ChannelInfo,
     ChannelUpdate,
+    GroupCreate,
+    GroupUpdate,
     HistoryEntry,
     PushResult,
     RealtimeNotification,
@@ -94,16 +96,38 @@ class NoticeManager:
     def delete_channel(self, channel_id: str) -> bool:
         return db.delete_channel(channel_id)
 
-    # ── Source ↔ Channel Mappings ───────────────────────────────────────
+    # ── Group CRUD ─────────────────────────────────────────────────────
 
-    def get_source_channels(self, source_id: str) -> list[str]:
-        return db.get_source_channels(source_id)
+    def list_groups(self) -> list:
+        return db.list_groups()
 
-    def set_source_channels(self, source_id: str, channel_ids: list[str]) -> None:
-        db.set_source_channels(source_id, channel_ids)
+    def get_group(self, group_id: str):
+        return db.get_group(group_id)
 
-    def get_all_mappings(self) -> dict[str, list[str]]:
-        return db.get_all_mappings()
+    def create_group(self, data: GroupCreate):
+        return db.create_group(data)
+
+    def update_group(self, group_id: str, data: GroupUpdate):
+        return db.update_group(group_id, data)
+
+    def delete_group(self, group_id: str) -> bool:
+        return db.delete_group(group_id)
+
+    # ── Group ↔ Channel Mappings ───────────────────────────────────────
+
+    def get_group_channels(self, group_id: str) -> list[str]:
+        return db.get_group_channels(group_id)
+
+    def set_group_channels(self, group_id: str, channel_ids: list[str]) -> None:
+        db.set_group_channels(group_id, channel_ids)
+
+    # ── Source ↔ Group Mappings ────────────────────────────────────────
+
+    def get_source_groups(self, source_id: str) -> list[str]:
+        return db.get_source_groups(source_id)
+
+    def set_source_groups(self, source_id: str, group_ids: list[str]) -> None:
+        db.set_source_groups(source_id, group_ids)
 
     # ── Notifications ──────────────────────────────────────────────────
 
@@ -115,7 +139,7 @@ class NoticeManager:
         level: str = "info",
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
-        channel_ids: Optional[list[str]] = None,
+        group_ids: Optional[list[str]] = None,
     ) -> RealtimeNotification:
         """Create or update a real-time notification and broadcast via WebSocket."""
         existing = db.get_realtime(notification_id)
@@ -146,9 +170,9 @@ class NoticeManager:
         )
         self._broadcast_ws(event)
 
-        # Route to channels
-        if channel_ids:
-            await self._push_to_channels(channel_ids, title, content, level, extra)
+        # Route to channels via groups
+        if group_ids:
+            await self._push_to_groups(group_ids, title, content, level, extra)
         elif source_id:
             await self._route_to_channels(source_id, title, content, level, extra)
 
@@ -240,7 +264,7 @@ class NoticeManager:
         level: str = "info",
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
-        channel_ids: Optional[list[str]] = None,
+        group_ids: Optional[list[str]] = None,
     ) -> list[PushResult]:
         """Push a regular (fire-and-forget) notification to all mapped channels."""
         # Record in history
@@ -264,10 +288,10 @@ class NoticeManager:
         )
         self._broadcast_ws(event)
 
-        # Route to channels
+        # Route to channels via groups
         results: list[PushResult] = []
-        if channel_ids:
-            results = await self._push_to_channels(channel_ids, title, content, level, extra)
+        if group_ids:
+            results = await self._push_to_groups(group_ids, title, content, level, extra)
         elif source_id:
             results = await self._route_to_channels(source_id, title, content, level, extra)
 
@@ -324,6 +348,22 @@ class NoticeManager:
             asyncio.create_task(
                 self.push_regular(title, content, level, source_id, extra)
             )
+
+    async def _push_to_groups(
+        self,
+        group_ids: list[str],
+        title: str,
+        content: str,
+        level: str,
+        extra: Optional[dict[str, Any]],
+    ) -> list[PushResult]:
+        """Push a notification to all channels in the specified groups."""
+        channel_ids: list[str] = []
+        for gid in group_ids:
+            channel_ids.extend(db.get_group_channels(gid))
+        # Deduplicate
+        channel_ids = list(set(channel_ids))
+        return await self._push_to_channels(channel_ids, title, content, level, extra)
 
     async def _push_to_channels(
         self,

@@ -135,7 +135,28 @@ class ChannelManager:
             resp = await self._http.request(
                 method, url, headers=headers, json=body if isinstance(body, dict) else None, content=body if isinstance(body, str) else None,
             )
-            ok = 200 <= resp.status_code < 300
-            return PushResult(ok=ok, channel=channel.name, detail=f"HTTP {resp.status_code}" if not ok else None)
+            if resp.status_code < 200 or resp.status_code >= 300:
+                return PushResult(ok=False, channel=channel.name, detail=f"HTTP {resp.status_code}")
+
+            # Try to parse response body for API-level errors
+            try:
+                resp_json = resp.json()
+                # Check for explicit failure indicators
+                code = resp_json.get("code")
+                msg = resp_json.get("msg") or resp_json.get("message") or resp_json.get("error") or ""
+
+                if resp_json.get("ok") is False:
+                    return PushResult(ok=False, channel=channel.name, detail=f"API error: {msg or 'ok=false'}")
+                if resp_json.get("status") in ("error", "fail", "failed"):
+                    return PushResult(ok=False, channel=channel.name, detail=f"API error: {msg or 'error status'}")
+                if code is not None:
+                    code_str = str(code)
+                    # Common error codes across APIs
+                    if code_str in ("0", "1", "-1", "400", "401", "403", "404", "500"):
+                        return PushResult(ok=False, channel=channel.name, detail=f"API error (code={code}): {msg}")
+            except (ValueError, KeyError):
+                pass  # Response is not JSON or has unexpected format — assume success based on HTTP status
+
+            return PushResult(ok=True, channel=channel.name)
         except Exception as e:
             return PushResult(ok=False, channel=channel.name, detail=str(e))
