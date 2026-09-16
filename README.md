@@ -18,7 +18,7 @@
 ## 安装
 
 ```bash
-pip install noticeme-cli
+pip install noticeme
 ```
 
 或从源码安装：

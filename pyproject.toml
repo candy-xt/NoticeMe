@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "noticeme-cli"
+name = "noticeme"
 version = "0.1.0"
 description = "Notification system with sources, channels, real-time push, and MCP support"
 readme = "README.md"
