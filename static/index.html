@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NoticeMe</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            surface:  { DEFAULT:'#0f1117', 2:'#161822', 3:'#1e2030', 4:'#262a3e' },
+            lsurface: { DEFAULT:'#ffffff', 2:'#f8f9fb', 3:'#eef0f4', 4:'#e2e5eb' },
+            accent:   { DEFAULT:'#6366f1', dim:'#4f46e5', glow:'#818cf8' },
+            success:  '#22c55e',
+            danger:   '#ef4444',
+            warn:     '#f59e0b',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    body { font-family:'Inter',system-ui,sans-serif; }
+    .mono { font-family:'JetBrains Mono',monospace; }
+    .card-enter { animation: slideUp .2s ease-out; }
+    @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    .modal-bg { background:rgba(0,0,0,.5); backdrop-filter:blur(4px); }
+    .scroll-thin { scrollbar-width:thin; }
+    .dark .scroll-thin { scrollbar-color:#262a3e #0f1117; }
+    .scroll-thin::-webkit-scrollbar { width:6px; }
+    .dark .scroll-thin::-webkit-scrollbar-track { background:#0f1117; }
+    .dark .scroll-thin::-webkit-scrollbar-thumb { background:#262a3e; border-radius:3px; }
+    .level-info    { border-left-color:#6366f1; }
+    .level-warning { border-left-color:#f59e0b; }
+    .level-error   { border-left-color:#ef4444; }
+    .level-success { border-left-color:#22c55e; }
+    .badge-info    { background:#6366f120; color:#818cf8; }
+    .badge-warning { background:#f59e0b20; color:#f59e0b; }
+    .badge-error   { background:#ef444420; color:#ef4444; }
+    .badge-success { background:#22c55e20; color:#22c55e; }
+    .fade-in { animation: fadeIn .3s ease-out; }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  </style>
+</head>
+<body class="bg-lsurface text-gray-800 dark:bg-surface dark:text-gray-200 min-h-screen transition-colors"
+      x-data="noticeMe()" x-init="init()">
+
+  <!-- Header -->
+  <header class="border-b border-lsurface-3 dark:border-surface-3 bg-lsurface-2 dark:bg-surface-2 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">N</div>
+        <h1 class="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">NoticeMe</h1>
+        <span class="text-xs text-gray-400 ml-2">v0.1.0</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- Nav tabs -->
+        <template x-for="t in tabs" :key="t.id">
+          <button @click="currentTab = t.id"
+            class="px-3 py-1.5 text-sm rounded-lg transition-colors"
+            :class="currentTab === t.id
+              ? 'bg-accent/15 text-accent-glow font-medium'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-lsurface-3 dark:hover:bg-surface-3'"
+            x-text="t.label"></button>
+        </template>
+        <!-- Theme toggle -->
+        <button @click="toggleTheme()" class="p-2 rounded-lg bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 transition-colors ml-2" title="切换主题">
+          <svg x-show="dark" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <svg x-show="!dark" class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-7xl mx-auto px-6 py-6">
+
+    <!-- ═══ Dashboard Tab ═══ -->
+    <div x-show="currentTab === 'dashboard'">
+      <!-- Push bar -->
+      <div class="mb-6 flex items-center gap-3">
+        <button @click="showPush = true"
+          class="px-4 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5m0 0l-7 7m7-7l7 7"/></svg>
+          推送通知
+        </button>
+        <button @click="clearAllRealtime()" x-show="realtimeNotifs.length > 0"
+          class="px-4 py-2 bg-danger/15 hover:bg-danger/25 text-danger text-sm font-medium rounded-lg transition-colors">
+          清空全部
+        </button>
+        <span class="text-xs text-gray-400 dark:text-gray-500 ml-auto">
+          <span x-show="wsConnected" class="text-success">● 已连接</span>
+          <span x-show="!wsConnected" class="text-danger">● 未连接</span>
+        </span>
+      </div>
+
+      <!-- Real-time notifications -->
+      <div x-show="realtimeNotifs.length > 0" class="space-y-3">
+        <template x-for="n in realtimeNotifs" :key="n.id">
+          <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl p-5 border-l-4 card-enter transition-colors"
+            :class="'level-' + n.level">
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="'badge-' + n.level" x-text="levelText(n.level)"></span>
+                  <span class="text-xs text-gray-400 mono" x-text="'#' + n.id"></span>
+                </div>
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-1" x-text="n.title"></h3>
+                <p class="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap" x-text="n.content"></p>
+                <div class="mt-2 flex items-center gap-4 text-xs text-gray-400">
+                  <span x-text="'更新: ' + fmtTime(n.updated_at)"></span>
+                  <span x-show="n.source_id" x-text="'来源: ' + n.source_id"></span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <button @click="editRealtime(n)" class="p-1.5 rounded-lg hover:bg-lsurface-3 dark:hover:bg-surface-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors" title="编辑">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7m-1.5-9.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button @click="clearRealtime(n.id)" class="p-1.5 rounded-lg hover:bg-danger/20 text-gray-400 hover:text-danger transition-colors" title="删除">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Empty state -->
+      <div x-show="realtimeNotifs.length === 0"
+        class="flex flex-col items-center justify-center py-24 text-gray-400 dark:text-gray-500">
+        <svg class="w-16 h-16 mb-4 opacity-30" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
+        </svg>
+        <p class="text-sm">暂无实时通知</p>
+        <p class="text-xs mt-1">通过 API 或 Webhook 推送带 ID 的通知即可显示</p>
+      </div>
+    </div>
+
+    <!-- ═══ Sources Tab ═══ -->
+    <div x-show="currentTab === 'sources'">
+      <div class="mb-6 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">通知源</h2>
+        <button @click="showSourceForm = true; resetSourceForm()"
+          class="px-4 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+          添加通知源
+        </button>
+      </div>
+
+      <div x-show="sources.length === 0" class="text-center py-16 text-gray-400 dark:text-gray-500">
+        <p class="text-sm">还没有通知源</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="s in sources" :key="s.id">
+          <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl p-5 card-enter hover:border-lsurface-4 dark:hover:border-surface-4 transition-colors">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="s.enabled ? 'bg-success shadow-[0_0_6px_#22c55e88]' : 'bg-gray-500'"></span>
+                <h3 class="font-semibold text-gray-900 dark:text-white truncate" x-text="s.name"></h3>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-accent/15 text-accent-glow" x-text="s.type"></span>
+            </div>
+            <div x-show="s.type === 'webhook' && s.webhook_path" class="bg-lsurface dark:bg-surface rounded-lg px-3 py-2 mb-3">
+              <p class="text-xs text-gray-400 dark:text-gray-400 mono">POST <span x-text="s.webhook_path"></span></p>
+            </div>
+            <div x-show="s.type === 'mqtt'" class="bg-lsurface dark:bg-surface rounded-lg px-3 py-2 mb-3">
+              <p class="text-xs text-gray-400 dark:text-gray-400 mono" x-text="(s.config.broker||'localhost') + ':' + (s.config.port||1883) + ' → ' + (s.config.topic||'#')"></p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="editSource(s)"
+                class="flex-1 px-3 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 text-gray-600 dark:text-gray-300 text-xs font-medium rounded-lg transition-colors">编辑</button>
+              <button @click="showMapping(s)"
+                class="flex-1 px-3 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent-glow text-xs font-medium rounded-lg transition-colors">渠道</button>
+              <button @click="deleteSource(s.id)"
+                class="px-2 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-danger/20 text-gray-400 hover:text-danger text-xs rounded-lg transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ═══ Channels Tab ═══ -->
+    <div x-show="currentTab === 'channels'">
+      <div class="mb-6 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">通知渠道</h2>
+        <button @click="showChannelForm = true; resetChannelForm()"
+          class="px-4 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+          添加渠道
+        </button>
+      </div>
+
+      <div x-show="channels.length === 0" class="text-center py-16 text-gray-400 dark:text-gray-500">
+        <p class="text-sm">还没有通知渠道</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="c in channels" :key="c.id">
+          <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl p-5 card-enter hover:border-lsurface-4 dark:hover:border-surface-4 transition-colors">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="c.enabled ? 'bg-success shadow-[0_0_6px_#22c55e88]' : 'bg-gray-500'"></span>
+                <h3 class="font-semibold text-gray-900 dark:text-white truncate" x-text="c.name"></h3>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-warn/15 text-warn" x-text="c.type"></span>
+            </div>
+            <div class="bg-lsurface dark:bg-surface rounded-lg px-3 py-2 mb-3">
+              <p class="text-xs text-gray-400 dark:text-gray-400 mono truncate"
+                x-text="c.type === 'mqtt'
+                  ? (c.config.broker||'localhost') + ':' + (c.config.port||1883) + ' → ' + (c.config.topic||'noticeme/out')
+                  : (c.config.method||'POST') + ' ' + (c.config.url||'—')"></p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="editChannel(c)"
+                class="flex-1 px-3 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 text-gray-600 dark:text-gray-300 text-xs font-medium rounded-lg transition-colors">编辑</button>
+              <button @click="deleteChannel(c.id)"
+                class="px-2 py-1.5 bg-lsurface-3 dark:bg-surface-3 hover:bg-danger/20 text-gray-400 hover:text-danger text-xs rounded-lg transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ═══ History Tab ═══ -->
+    <div x-show="currentTab === 'history'">
+      <div class="mb-6 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">历史记录</h2>
+        <button @click="loadHistory()"
+          class="px-4 py-2 bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors">刷新</button>
+      </div>
+
+      <div x-show="history.length === 0" class="text-center py-16 text-gray-400 dark:text-gray-500">
+        <p class="text-sm">暂无历史记录</p>
+      </div>
+
+      <div class="space-y-2">
+        <template x-for="h in history" :key="h.id">
+          <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl px-5 py-4 border-l-4 card-enter"
+            :class="'level-' + h.level">
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="'badge-' + h.level" x-text="levelText(h.level)"></span>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-lsurface-3 dark:bg-surface-3 text-gray-500" x-text="actionText(h.action)"></span>
+                  <span x-show="h.notification_id" class="text-xs text-gray-400 mono" x-text="'#' + h.notification_id"></span>
+                </div>
+                <h4 class="font-medium text-gray-900 dark:text-white text-sm" x-text="h.title"></h4>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2" x-text="h.content"></p>
+              </div>
+              <span class="text-xs text-gray-400 flex-shrink-0" x-text="fmtTime(h.created_at)"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ Push Modal ═══ -->
+  <div x-show="showPush" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showPush = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5">推送通知</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">通知类型</label>
+          <div class="flex gap-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" value="regular" x-model="pushForm.type" class="text-accent focus:ring-accent">
+              <span class="text-sm text-gray-700 dark:text-gray-300">普通通知</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" value="realtime" x-model="pushForm.type" class="text-accent focus:ring-accent">
+              <span class="text-sm text-gray-700 dark:text-gray-300">实时通知</span>
+            </label>
+          </div>
+        </div>
+        <div x-show="pushForm.type === 'realtime'">
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">通知 ID <span class="text-gray-400 dark:text-gray-600">（用于更新已有通知）</span></label>
+          <input x-model="pushForm.id" placeholder="如: server-status" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">标题</label>
+          <input x-model="pushForm.title" placeholder="通知标题" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">内容</label>
+          <textarea x-model="pushForm.content" rows="3" placeholder="通知内容" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-none"></textarea>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">级别</label>
+          <select x-model="pushForm.level" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
+            <option value="info">信息</option>
+            <option value="success">成功</option>
+            <option value="warning">警告</option>
+            <option value="error">错误</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button @click="showPush = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
+        <button @click="doPush()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors">推送</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Edit Realtime Modal ═══ -->
+  <div x-show="showEditRT" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showEditRT = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5">编辑实时通知 <span class="text-xs text-gray-400 mono" x-text="'#' + editRTForm.id"></span></h2>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">标题</label>
+          <input x-model="editRTForm.title" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">内容</label>
+          <textarea x-model="editRTForm.content" rows="3" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors resize-none"></textarea>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">级别</label>
+          <select x-model="editRTForm.level" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
+            <option value="info">信息</option>
+            <option value="success">成功</option>
+            <option value="warning">警告</option>
+            <option value="error">错误</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button @click="showEditRT = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
+        <button @click="doEditRT()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Source Form Modal ═══ -->
+  <div x-show="showSourceForm" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showSourceForm = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[85vh] overflow-y-auto scroll-thin">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5" x-text="sourceForm._edit ? '编辑通知源' : '添加通知源'"></h2>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">名称</label>
+          <input x-model="sourceForm.name" placeholder="如: 服务器监控" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">类型</label>
+          <select x-model="sourceForm.type" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors" :disabled="sourceForm._edit">
+            <option value="webhook">Webhook (API)</option>
+            <option value="mqtt">MQTT 订阅</option>
+          </select>
+        </div>
+        <!-- MQTT config -->
+        <div x-show="sourceForm.type === 'mqtt'" class="space-y-3 pt-2 border-t border-lsurface-3 dark:border-surface-3">
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Broker 地址</label>
+            <input x-model="sourceForm.broker" placeholder="localhost" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">端口</label>
+            <input x-model="sourceForm.port" type="number" placeholder="1883" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Topic</label>
+            <input x-model="sourceForm.topic" placeholder="noticeme/in" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">用户名（可选）</label>
+            <input x-model="sourceForm.username" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">密码（可选）</label>
+            <input x-model="sourceForm.password" type="password" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" x-model="sourceForm.enabled" id="src_enabled" class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
+          <label for="src_enabled" class="text-sm text-gray-600 dark:text-gray-300">启用</label>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button @click="showSourceForm = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
+        <button @click="doSaveSource()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors" x-text="sourceForm._edit ? '保存' : '添加'"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Channel Form Modal ═══ -->
+  <div x-show="showChannelForm" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showChannelForm = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[85vh] overflow-y-auto scroll-thin">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5" x-text="channelForm._edit ? '编辑渠道' : '添加渠道'"></h2>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">名称</label>
+          <input x-model="channelForm.name" placeholder="如: 飞书通知" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">类型</label>
+          <select x-model="channelForm.type" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors" :disabled="channelForm._edit">
+            <option value="api">API 请求</option>
+            <option value="mqtt">MQTT 发布</option>
+          </select>
+        </div>
+        <!-- API config -->
+        <div x-show="channelForm.type === 'api'" class="space-y-3 pt-2 border-t border-lsurface-3 dark:border-surface-3">
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">URL</label>
+            <input x-model="channelForm.url" placeholder="https://example.com/api/notify" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">请求方法</label>
+            <select x-model="channelForm.method" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="PATCH">PATCH</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Headers (JSON)</label>
+            <textarea x-model="channelForm.headersStr" rows="2" placeholder='{"Authorization": "Bearer xxx"}' class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-none"></textarea>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Body 模板（可选，留空用默认 JSON）</label>
+            <textarea x-model="channelForm.bodyTemplate" rows="3" placeholder='{"msg": "{{title}}: {{content}}"}' class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-none"></textarea>
+            <p class="text-xs text-gray-400 mt-1">可用变量: {{title}} {{content}} {{level}}</p>
+          </div>
+        </div>
+        <!-- MQTT config -->
+        <div x-show="channelForm.type === 'mqtt'" class="space-y-3 pt-2 border-t border-lsurface-3 dark:border-surface-3">
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Broker 地址</label>
+            <input x-model="channelForm.broker" placeholder="localhost" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">端口</label>
+            <input x-model="channelForm.port" type="number" placeholder="1883" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Topic</label>
+            <input x-model="channelForm.topic" placeholder="noticeme/out" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">用户名（可选）</label>
+            <input x-model="channelForm.username" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">密码（可选）</label>
+            <input x-model="channelForm.password" type="password" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" x-model="channelForm.enabled" id="ch_enabled" class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
+          <label for="ch_enabled" class="text-sm text-gray-600 dark:text-gray-300">启用</label>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button @click="showChannelForm = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
+        <button @click="doSaveChannel()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors" x-text="channelForm._edit ? '保存' : '添加'"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Mapping Modal ═══ -->
+  <div x-show="showMappingModal" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showMappingModal = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">配置渠道映射</h2>
+      <p class="text-xs text-gray-400 mb-5">选择 <span class="text-accent font-medium" x-text="mappingSource?.name"></span> 的通知渠道</p>
+      <div class="space-y-2 max-h-60 overflow-y-auto scroll-thin">
+        <template x-for="c in channels" :key="c.id">
+          <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-lsurface-3 dark:hover:bg-surface-3 cursor-pointer transition-colors">
+            <input type="checkbox" :value="c.id" x-model="mappingSelected"
+              class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="c.name"></p>
+              <p class="text-xs text-gray-400 mono" x-text="c.type"></p>
+            </div>
+          </label>
+        </template>
+      </div>
+      <div x-show="channels.length === 0" class="text-center py-8 text-gray-400 text-sm">
+        还没有渠道，请先创建
+      </div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button @click="showMappingModal = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
+        <button @click="doSaveMapping()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function noticeMe() {
+      return {
+        // Navigation
+        tabs: [
+          { id: 'dashboard', label: '仪表盘' },
+          { id: 'sources',   label: '通知源' },
+          { id: 'channels',  label: '通知渠道' },
+          { id: 'history',   label: '历史记录' },
+        ],
+        currentTab: 'dashboard',
+        dark: true,
+
+        // Data
+        realtimeNotifs: [],
+        sources: [],
+        channels: [],
+        history: [],
+
+        // WebSocket
+        ws: null,
+        wsConnected: false,
+
+        // Modals
+        showPush: false,
+        showEditRT: false,
+        showSourceForm: false,
+        showChannelForm: false,
+        showMappingModal: false,
+
+        // Forms
+        pushForm: { type: 'regular', id: '', title: '', content: '', level: 'info' },
+        editRTForm: { id: '', title: '', content: '', level: 'info' },
+        sourceForm: { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', username: '', password: '' },
+        channelForm: { _edit: null, name: '', type: 'api', enabled: true, url: '', method: 'POST', headersStr: '', bodyTemplate: '', broker: '', port: '1883', topic: '', username: '', password: '' },
+        mappingSource: null,
+        mappingSelected: [],
+
+        // ── Init ───────────────────────────────────────────────
+        init() {
+          const saved = localStorage.getItem('nm-theme');
+          this.dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+          this.applyTheme();
+          this.connectWS();
+          this.refresh();
+          setInterval(() => this.refresh(), 10000);
+        },
+
+        toggleTheme() {
+          this.dark = !this.dark;
+          localStorage.setItem('nm-theme', this.dark ? 'dark' : 'light');
+          this.applyTheme();
+        },
+        applyTheme() { document.documentElement.classList.toggle('dark', this.dark); },
+
+        // ── WebSocket ─────────────────────────────────────────
+        connectWS() {
+          const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          this.ws = new WebSocket(`${proto}//${location.host}/ws`);
+          this.ws.onopen = () => { this.wsConnected = true; };
+          this.ws.onclose = () => {
+            this.wsConnected = false;
+            setTimeout(() => this.connectWS(), 3000);
+          };
+          this.ws.onmessage = (e) => {
+            const d = JSON.parse(e.data);
+            if (d.type === 'ping') return;
+            if (d.type === 'realtime_update') {
+              const idx = this.realtimeNotifs.findIndex(n => n.id === d.notification_id);
+              const entry = {
+                id: d.notification_id,
+                title: d.title,
+                content: d.content,
+                level: d.level,
+                extra: d.extra || {},
+                updated_at: d.timestamp,
+                source_id: null,
+                created_at: d.timestamp,
+              };
+              if (idx >= 0) {
+                this.realtimeNotifs[idx] = entry;
+              } else {
+                this.realtimeNotifs.unshift(entry);
+              }
+            } else if (d.type === 'realtime_clear') {
+              if (d.notification_id === '*') {
+                this.realtimeNotifs = [];
+              } else {
+                this.realtimeNotifs = this.realtimeNotifs.filter(n => n.id !== d.notification_id);
+              }
+            }
+          };
+        },
+
+        // ── Refresh ───────────────────────────────────────────
+        async refresh() {
+          try {
+            const [rt, src, ch] = await Promise.all([
+              fetch('/api/notifications/realtime').then(r => r.json()),
+              fetch('/api/sources').then(r => r.json()),
+              fetch('/api/channels').then(r => r.json()),
+            ]);
+            if (rt.ok) this.realtimeNotifs = rt.data;
+            if (src.ok) this.sources = src.data;
+            if (ch.ok) this.channels = ch.data;
+          } catch (e) { /* ignore */ }
+        },
+
+        async loadHistory() {
+          try {
+            const r = await fetch('/api/history?limit=200');
+            const j = await r.json();
+            if (j.ok) this.history = j.data;
+          } catch (e) {}
+        },
+
+        // ── Push ──────────────────────────────────────────────
+        async doPush() {
+          if (!this.pushForm.title) return;
+          if (this.pushForm.type === 'realtime') {
+            if (!this.pushForm.id) return;
+            await fetch('/api/notifications/realtime', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({
+                id: this.pushForm.id,
+                title: this.pushForm.title,
+                content: this.pushForm.content,
+                level: this.pushForm.level,
+              }),
+            });
+          } else {
+            await fetch('/api/notifications/push', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({
+                title: this.pushForm.title,
+                content: this.pushForm.content,
+                level: this.pushForm.level,
+              }),
+            });
+          }
+          this.showPush = false;
+          this.pushForm = { type: 'regular', id: '', title: '', content: '', level: 'info' };
+          await this.refresh();
+        },
+
+        // ── Edit Realtime ─────────────────────────────────────
+        editRealtime(n) {
+          this.editRTForm = { id: n.id, title: n.title, content: n.content, level: n.level };
+          this.showEditRT = true;
+        },
+        async doEditRT() {
+          await fetch(`/api/notifications/realtime/${this.editRTForm.id}`, {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+              title: this.editRTForm.title,
+              content: this.editRTForm.content,
+              level: this.editRTForm.level,
+            }),
+          });
+          this.showEditRT = false;
+          await this.refresh();
+        },
+        async clearRealtime(id) {
+          await fetch(`/api/notifications/realtime/${id}`, { method: 'DELETE' });
+          await this.refresh();
+        },
+        async clearAllRealtime() {
+          await fetch('/api/notifications/realtime', { method: 'DELETE' });
+          await this.refresh();
+        },
+
+        // ── Source CRUD ───────────────────────────────────────
+        resetSourceForm() {
+          this.sourceForm = { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', username: '', password: '' };
+        },
+        editSource(s) {
+          this.sourceForm = {
+            _edit: s.id,
+            name: s.name,
+            type: s.type,
+            enabled: s.enabled,
+            broker: s.config.broker || '',
+            port: String(s.config.port || '1883'),
+            topic: s.config.topic || '',
+            username: s.config.username || '',
+            password: s.config.password || '',
+          };
+          this.showSourceForm = true;
+        },
+        async doSaveSource() {
+          const cfg = {};
+          if (this.sourceForm.type === 'mqtt') {
+            cfg.broker = this.sourceForm.broker || 'localhost';
+            cfg.port = parseInt(this.sourceForm.port) || 1883;
+            cfg.topic = this.sourceForm.topic || '#';
+            if (this.sourceForm.username) cfg.username = this.sourceForm.username;
+            if (this.sourceForm.password) cfg.password = this.sourceForm.password;
+          }
+          const body = {
+            name: this.sourceForm.name,
+            type: this.sourceForm.type,
+            enabled: this.sourceForm.enabled,
+            config: cfg,
+          };
+          if (this.sourceForm._edit) {
+            await fetch(`/api/sources/${this.sourceForm._edit}`, {
+              method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+            });
+          } else {
+            await fetch('/api/sources', {
+              method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+            });
+          }
+          this.showSourceForm = false;
+          await this.refresh();
+        },
+        async deleteSource(id) {
+          if (!confirm('确定删除此通知源？')) return;
+          await fetch(`/api/sources/${id}`, { method: 'DELETE' });
+          await this.refresh();
+        },
+
+        // ── Channel CRUD ──────────────────────────────────────
+        resetChannelForm() {
+          this.channelForm = { _edit: null, name: '', type: 'api', enabled: true, url: '', method: 'POST', headersStr: '', bodyTemplate: '', broker: '', port: '1883', topic: '', username: '', password: '' };
+        },
+        editChannel(c) {
+          this.channelForm = {
+            _edit: c.id,
+            name: c.name,
+            type: c.type,
+            enabled: c.enabled,
+            url: c.config.url || '',
+            method: c.config.method || 'POST',
+            headersStr: c.config.headers ? JSON.stringify(c.config.headers) : '',
+            bodyTemplate: c.config.body_template || '',
+            broker: c.config.broker || '',
+            port: String(c.config.port || '1883'),
+            topic: c.config.topic || '',
+            username: c.config.username || '',
+            password: c.config.password || '',
+          };
+          this.showChannelForm = true;
+        },
+        async doSaveChannel() {
+          const cfg = {};
+          if (this.channelForm.type === 'api') {
+            cfg.url = this.channelForm.url;
+            cfg.method = this.channelForm.method;
+            if (this.channelForm.headersStr) {
+              try { cfg.headers = JSON.parse(this.channelForm.headersStr); } catch(e) {}
+            }
+            if (this.channelForm.bodyTemplate) cfg.body_template = this.channelForm.bodyTemplate;
+          } else {
+            cfg.broker = this.channelForm.broker || 'localhost';
+            cfg.port = parseInt(this.channelForm.port) || 1883;
+            cfg.topic = this.channelForm.topic || 'noticeme/out';
+            if (this.channelForm.username) cfg.username = this.channelForm.username;
+            if (this.channelForm.password) cfg.password = this.channelForm.password;
+          }
+          const body = {
+            name: this.channelForm.name,
+            type: this.channelForm.type,
+            enabled: this.channelForm.enabled,
+            config: cfg,
+          };
+          if (this.channelForm._edit) {
+            await fetch(`/api/channels/${this.channelForm._edit}`, {
+              method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+            });
+          } else {
+            await fetch('/api/channels', {
+              method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+            });
+          }
+          this.showChannelForm = false;
+          await this.refresh();
+        },
+        async deleteChannel(id) {
+          if (!confirm('确定删除此渠道？')) return;
+          await fetch(`/api/channels/${id}`, { method: 'DELETE' });
+          await this.refresh();
+        },
+
+        // ── Mapping ───────────────────────────────────────────
+        async showMapping(s) {
+          this.mappingSource = s;
+          this.mappingSelected = [];
+          try {
+            const r = await fetch(`/api/sources/${s.id}/channels`);
+            const j = await r.json();
+            if (j.ok) this.mappingSelected = j.data;
+          } catch(e) {}
+          this.showMappingModal = true;
+        },
+        async doSaveMapping() {
+          await fetch(`/api/sources/${this.mappingSource.id}/channels`, {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ source_id: this.mappingSource.id, channel_ids: this.mappingSelected }),
+          });
+          this.showMappingModal = false;
+        },
+
+        // ── History ───────────────────────────────────────────
+        async loadHistory() {
+          try {
+            const r = await fetch('/api/history?limit=200');
+            const j = await r.json();
+            if (j.ok) this.history = j.data;
+          } catch(e) {}
+        },
+
+        // ── Helpers ───────────────────────────────────────────
+        levelText(l) {
+          return { info:'信息', warning:'警告', error:'错误', success:'成功' }[l] || l;
+        },
+        actionText(a) {
+          return { created:'创建', updated:'更新', cleared:'清除', pushed:'推送' }[a] || a;
+        },
+        fmtTime(iso) {
+          if (!iso) return '';
+          try {
+            const d = new Date(iso);
+            return d.toLocaleString('zh-CN', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+          } catch(e) { return iso; }
+        },
+      };
+    }
+  </script>
+</body>
+</html>
