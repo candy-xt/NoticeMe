@@ -24,7 +24,7 @@ from .core.models import (
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path.home() / ".noticeme"
 
 
 @asynccontextmanager

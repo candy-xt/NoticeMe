@@ -20,7 +20,7 @@ from .models import (
     SourceUpdate,
 )
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+DATA_DIR = Path.home() / ".noticeme"
 DB_PATH = DATA_DIR / "notice.db"
 
 SCHEMA = """
