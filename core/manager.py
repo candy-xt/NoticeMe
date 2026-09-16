@@ -11,15 +11,12 @@ from typing import Any, Optional
 from . import database as db
 from .channels import ChannelManager
 from .models import (
-    ChannelCreate,
     ChannelInfo,
     ChannelUpdate,
     HistoryEntry,
-    NotificationType,
     PushResult,
     RealtimeNotification,
     RealtimeUpdate,
-    RegularNotification,
     SourceCreate,
     SourceInfo,
     SourceUpdate,

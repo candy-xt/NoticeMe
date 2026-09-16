@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "noticeme-cli"
+version = "0.1.0"
+description = "Notification system with sources, channels, real-time push, and MCP support"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "CandyXT" }]
+keywords = ["notification", "mqtt", "webhook", "mcp", "realtime"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Monitoring",
+]
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+    "click>=8.0",
+    "aiomqtt>=2.0",
+    "websockets>=14.0",
+    "mcp>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+nme = "NoticeMe.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/CandyXT/NoticeMe"
+Repository = "https://github.com/CandyXT/NoticeMe"
+Issues = "https://github.com/CandyXT/NoticeMe/issues"
+
+[tool.hatch.build.targets.sdist]
+include = ["NoticeMe/"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["NoticeMe"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120

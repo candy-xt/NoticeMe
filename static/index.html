@@ -45,6 +45,12 @@
     .badge-success { background:#22c55e20; color:#22c55e; }
     .fade-in { animation: fadeIn .3s ease-out; }
     @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+    .scrollbar-none { scrollbar-width:none; }
+    .scrollbar-none::-webkit-scrollbar { display:none; }
+    /* Safe area for notch devices */
+    @supports (padding: env(safe-area-inset-bottom)) {
+      body { padding-bottom: env(safe-area-inset-bottom); }
+    }
   </style>
 </head>
 <body class="bg-lsurface text-gray-800 dark:bg-surface dark:text-gray-200 min-h-screen transition-colors"
@@ -52,24 +58,15 @@
 
   <!-- Header -->
   <header class="border-b border-lsurface-3 dark:border-surface-3 bg-lsurface-2 dark:bg-surface-2 sticky top-0 z-30">
-    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">N</div>
-        <h1 class="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">NoticeMe</h1>
-        <span class="text-xs text-gray-400 ml-2">v0.1.0</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <!-- Nav tabs -->
-        <template x-for="t in tabs" :key="t.id">
-          <button @click="currentTab = t.id"
-            class="px-3 py-1.5 text-sm rounded-lg transition-colors"
-            :class="currentTab === t.id
-              ? 'bg-accent/15 text-accent-glow font-medium'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-lsurface-3 dark:hover:bg-surface-3'"
-            x-text="t.label"></button>
-        </template>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
+      <div class="flex items-center justify-between mb-2 sm:mb-0">
+        <div class="flex items-center gap-2 sm:gap-3">
+          <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">N</div>
+          <h1 class="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">NoticeMe</h1>
+          <span class="text-xs text-gray-400 hidden sm:inline ml-1">v0.1.0</span>
+        </div>
         <!-- Theme toggle -->
-        <button @click="toggleTheme()" class="p-2 rounded-lg bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 transition-colors ml-2" title="切换主题">
+        <button @click="toggleTheme()" class="p-2 rounded-lg bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 transition-colors" title="切换主题">
           <svg x-show="dark" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
           </svg>
@@ -78,16 +75,27 @@
           </svg>
         </button>
       </div>
+      <!-- Nav tabs — scrollable on mobile -->
+      <nav class="flex items-center gap-1 overflow-x-auto -mx-1 px-1 pb-1 sm:pb-0 sm:overflow-visible scrollbar-none">
+        <template x-for="t in tabs" :key="t.id">
+          <button @click="currentTab = t.id"
+            class="px-3 py-1.5 text-sm rounded-lg transition-colors whitespace-nowrap flex-shrink-0"
+            :class="currentTab === t.id
+              ? 'bg-accent/15 text-accent-glow font-medium'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-lsurface-3 dark:hover:bg-surface-3'"
+            x-text="t.label"></button>
+        </template>
+      </nav>
     </div>
   </header>
 
   <!-- Main -->
-  <main class="max-w-7xl mx-auto px-6 py-6">
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
 
     <!-- ═══ Dashboard Tab ═══ -->
     <div x-show="currentTab === 'dashboard'">
       <!-- Push bar -->
-      <div class="mb-6 flex items-center gap-3">
+      <div class="mb-6 flex flex-wrap items-center gap-2 sm:gap-3">
         <button @click="showPush = true"
           class="px-4 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5m0 0l-7 7m7-7l7 7"/></svg>
@@ -147,7 +155,7 @@
 
     <!-- ═══ Sources Tab ═══ -->
     <div x-show="currentTab === 'sources'">
-      <div class="mb-6 flex items-center justify-between">
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-base font-semibold text-gray-900 dark:text-white">通知源</h2>
         <button @click="showSourceForm = true; resetSourceForm()"
           class="px-4 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
@@ -193,7 +201,7 @@
 
     <!-- ═══ Channels Tab ═══ -->
     <div x-show="currentTab === 'channels'">
-      <div class="mb-6 flex items-center justify-between">
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-base font-semibold text-gray-900 dark:text-white">通知渠道</h2>
         <button @click="showChannelForm = true; resetChannelForm()"
           class="px-4 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
@@ -237,7 +245,7 @@
 
     <!-- ═══ History Tab ═══ -->
     <div x-show="currentTab === 'history'">
-      <div class="mb-6 flex items-center justify-between">
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-base font-semibold text-gray-900 dark:text-white">历史记录</h2>
         <button @click="loadHistory()"
           class="px-4 py-2 bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors">刷新</button>
@@ -270,8 +278,8 @@
   </main>
 
   <!-- ═══ Push Modal ═══ -->
-  <div x-show="showPush" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showPush = false">
-    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+  <div x-show="showPush" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showPush = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
       <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5">推送通知</h2>
       <div class="space-y-4">
         <div>
@@ -317,8 +325,8 @@
   </div>
 
   <!-- ═══ Edit Realtime Modal ═══ -->
-  <div x-show="showEditRT" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showEditRT = false">
-    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+  <div x-show="showEditRT" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showEditRT = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
       <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5">编辑实时通知 <span class="text-xs text-gray-400 mono" x-text="'#' + editRTForm.id"></span></h2>
       <div class="space-y-4">
         <div>
@@ -347,8 +355,8 @@
   </div>
 
   <!-- ═══ Source Form Modal ═══ -->
-  <div x-show="showSourceForm" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showSourceForm = false">
-    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[85vh] overflow-y-auto scroll-thin">
+  <div x-show="showSourceForm" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showSourceForm = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
       <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5" x-text="sourceForm._edit ? '编辑通知源' : '添加通知源'"></h2>
       <div class="space-y-4">
         <div>
@@ -398,8 +406,8 @@
   </div>
 
   <!-- ═══ Channel Form Modal ═══ -->
-  <div x-show="showChannelForm" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showChannelForm = false">
-    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[85vh] overflow-y-auto scroll-thin">
+  <div x-show="showChannelForm" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showChannelForm = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
       <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-5" x-text="channelForm._edit ? '编辑渠道' : '添加渠道'"></h2>
       <div class="space-y-4">
         <div>
@@ -473,8 +481,8 @@
   </div>
 
   <!-- ═══ Mapping Modal ═══ -->
-  <div x-show="showMappingModal" x-cloak class="fixed inset-0 z-50 modal-bg flex items-center justify-center p-4" @click.self="showMappingModal = false">
-    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+  <div x-show="showMappingModal" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showMappingModal = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
       <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">配置渠道映射</h2>
       <p class="text-xs text-gray-400 mb-5">选择 <span class="text-accent font-medium" x-text="mappingSource?.name"></span> 的通知渠道</p>
       <div class="space-y-2 max-h-60 overflow-y-auto scroll-thin">

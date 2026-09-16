@@ -63,11 +63,7 @@ class SourceManager:
 
     async def _mqtt_loop(self, source: SourceInfo) -> None:
         """MQTT subscription loop for a source."""
-        try:
-            import aiomqtt
-        except ImportError:
-            logger.error("aiomqtt not installed — MQTT source %s unavailable", source.id)
-            return
+        import aiomqtt
 
         cfg = source.config
         broker = cfg.get("broker", "localhost")

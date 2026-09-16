@@ -66,10 +66,7 @@ class ChannelManager:
         level: str,
         extra: Optional[dict[str, Any]],
     ) -> PushResult:
-        try:
-            import aiomqtt
-        except ImportError:
-            return PushResult(ok=False, channel=channel.name, detail="aiomqtt not installed")
+        import aiomqtt
 
         cfg = channel.config
         broker = cfg.get("broker", "localhost")
