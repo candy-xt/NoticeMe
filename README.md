@@ -18,7 +18,7 @@
 ## 安装
 
 ```bash
-pip install noticeme
+pip install noticeme-srv
 ```
 
 或从源码安装：
