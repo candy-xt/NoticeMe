@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "noticeme-srv"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Notification system with sources, channels, real-time push, and MCP support"
 readme = "README.md"
 license = "MIT"
@@ -38,6 +38,9 @@ nme = "NoticeMe.cli:main"
 Homepage = "https://github.com/CandyXT/NoticeMe"
 Repository = "https://github.com/CandyXT/NoticeMe"
 Issues = "https://github.com/CandyXT/NoticeMe/issues"
+
+[tool.hatch.version]
+path = "NoticeMe/__init__.py"
 
 [tool.hatch.build.targets.sdist]
 include = ["NoticeMe/"]

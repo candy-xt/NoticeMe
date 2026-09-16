@@ -9,6 +9,7 @@ from typing import Any
 from mcp import types
 from mcp.server import Server
 
+from . import __version__
 from .core import database as db
 from .core.models import SourceCreate, ChannelCreate, RealtimeUpdate
 
@@ -268,7 +269,7 @@ async def _dispatch(name: str, args: dict[str, Any]) -> Any:
 
 def _create_mcp_server() -> Server:
     """Create the MCP Server instance with handlers registered."""
-    server = Server("noticeme", version="0.1.0")
+    server = Server("noticeme", version=__version__)
     server.add_request_handler("tools/list", type(types.ListToolsRequest), _handle_list_tools)
     server.add_request_handler("tools/call", type(types.CallToolRequest), _handle_call_tool)
     return server

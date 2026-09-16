@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocket
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import __version__
 from .core.manager import manager
 from .core.models import (
     ChannelCreate,
@@ -39,7 +40,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="NoticeMe",
         description="Notification system with sources, channels, real-time and regular notifications",
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
     )
 
