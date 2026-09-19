@@ -355,14 +355,10 @@
               </div>
               <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-accent/15 text-accent-glow" x-text="n.channel_ids.length + ' 渠道'"></span>
             </div>
-            <div x-show="n.last_title" class="bg-lsurface dark:bg-surface rounded-lg px-3 py-2 mb-3">
+            <div x-show="n.last_title" class="bg-lsurface dark:bg-surface rounded-lg px-3 py-2">
               <p class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate" x-text="n.last_title"></p>
               <p class="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5" x-text="n.last_content"></p>
               <p class="text-xs text-gray-400 dark:text-gray-600 mt-1" x-text="n.last_time ? fmtTime(n.last_time) : ''"></p>
-            </div>
-            <div class="flex items-center gap-2">
-              <button @click="showNotifierChannelMapping(n)"
-                class="flex-1 px-3 py-1.5 bg-warn/15 hover:bg-warn/25 text-warn text-xs font-medium rounded-lg transition-colors">渠道配置</button>
             </div>
           </div>
         </template>
@@ -753,33 +749,6 @@
     </div>
   </div>
 
-  <!-- ═══ Notifier Channel Mapping Modal ═══ -->
-  <div x-show="showNotifierChModal" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showNotifierChModal = false">
-    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
-      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">配置通知者渠道</h2>
-      <p class="text-xs text-gray-400 mb-5">为 <span class="text-accent font-medium mono" x-text="notifierChSource?.sender_id"></span> 配置推送渠道</p>
-      <div class="space-y-2 max-h-60 overflow-y-auto scroll-thin">
-        <template x-for="c in channels" :key="c.id">
-          <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-lsurface-3 dark:hover:bg-surface-3 cursor-pointer transition-colors">
-            <input type="checkbox" :value="c.id" x-model="notifierChSelected"
-              class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
-            <div class="min-w-0">
-              <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="c.name"></p>
-              <p class="text-xs text-gray-400 mono" x-text="c.type"></p>
-            </div>
-          </label>
-        </template>
-      </div>
-      <div x-show="channels.length === 0" class="text-center py-8 text-gray-400 text-sm">
-        还没有渠道，请先创建
-      </div>
-      <div class="flex justify-end gap-3 mt-6">
-        <button @click="showNotifierChModal = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
-        <button @click="doSaveNotifierChannels()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors">保存</button>
-      </div>
-    </div>
-  </div>
-
   <script>
     function noticeMe() {
       return {
@@ -820,9 +789,6 @@
         showGroupForm: false,
         showChannelForm: false,
         showMappingModal: false,
-        showNotifierChModal: false,
-        notifierChSource: null,
-        notifierChSelected: [],
 
         // Forms
         pushForm: { type: 'regular', id: '', title: '', content: '', level: 'info', groupIds: [] },
@@ -1218,26 +1184,6 @@
         async deleteChannel(id) {
           if (!confirm('确定删除此渠道？')) return;
           await this._fetch(`/api/channels/${id}`, { method: 'DELETE' });
-          await this.refresh();
-        },
-
-        // ── Notifier Channel Mapping ─────────────────────────
-        async showNotifierChannelMapping(n) {
-          this.notifierChSource = n;
-          this.notifierChSelected = [];
-          try {
-            const r = await this._fetch(`/api/notifiers/${encodeURIComponent(n.sender_id)}/channels`);
-            const j = await r.json();
-            if (j.ok) this.notifierChSelected = j.data;
-          } catch(e) {}
-          this.showNotifierChModal = true;
-        },
-        async doSaveNotifierChannels() {
-          await this._fetch(`/api/notifiers/${encodeURIComponent(this.notifierChSource.sender_id)}/channels`, {
-            method: 'PUT',
-            body: JSON.stringify({ channel_ids: this.notifierChSelected }),
-          });
-          this.showNotifierChModal = false;
           await this.refresh();
         },
 
