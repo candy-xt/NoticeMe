@@ -140,6 +140,7 @@ class NoticeManager:
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
         group_ids: Optional[list[str]] = None,
+        sender: str = "",
     ) -> RealtimeNotification:
         """Create or update a real-time notification and broadcast via WebSocket."""
         existing = db.get_realtime(notification_id)
@@ -155,6 +156,7 @@ class NoticeManager:
             level=level,
             notification_id=notification_id,
             source_id=source_id,
+            sender=sender,
             extra=extra,
         )
 
@@ -175,6 +177,12 @@ class NoticeManager:
             await self._push_to_groups(group_ids, title, content, level, extra)
         elif source_id:
             await self._route_to_channels(source_id, title, content, level, extra)
+
+        # Route to sender channels
+        if sender:
+            sender_ch_ids = db.get_sender_channels(sender)
+            if sender_ch_ids:
+                await self._push_to_channels(sender_ch_ids, title, content, level, extra)
 
         return notif
 
@@ -265,6 +273,7 @@ class NoticeManager:
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
         group_ids: Optional[list[str]] = None,
+        sender: str = "",
     ) -> list[PushResult]:
         """Push a regular (fire-and-forget) notification to all mapped channels."""
         # Record in history
@@ -274,6 +283,7 @@ class NoticeManager:
             content=content,
             level=level,
             source_id=source_id,
+            sender=sender,
             extra=extra,
         )
 
@@ -294,6 +304,13 @@ class NoticeManager:
             results = await self._push_to_groups(group_ids, title, content, level, extra)
         elif source_id:
             results = await self._route_to_channels(source_id, title, content, level, extra)
+
+        # Route to sender channels
+        if sender:
+            sender_ch_ids = db.get_sender_channels(sender)
+            if sender_ch_ids:
+                sender_results = await self._push_to_channels(sender_ch_ids, title, content, level, extra)
+                results.extend(sender_results)
 
         return results
 
@@ -328,6 +345,17 @@ class NoticeManager:
                 except asyncio.QueueFull:
                     pass
 
+    # ── Notifiers ─────────────────────────────────────────────────────
+
+    def list_notifiers(self) -> list:
+        return db.list_notifiers()
+
+    def get_sender_channels(self, sender_id: str) -> list[str]:
+        return db.get_sender_channels(sender_id)
+
+    def set_sender_channels(self, sender_id: str, channel_ids: list[str]) -> None:
+        db.set_sender_channels(sender_id, channel_ids)
+
     # ── Internal routing ────────────────────────────────────────────────
 
     def _on_source_receive(self, source_id: str, payload: dict[str, Any]) -> None:
@@ -337,16 +365,17 @@ class NoticeManager:
         level = payload.get("level", "info")
         notification_id = payload.get("id")
         extra = payload.get("extra", {})
+        sender = extra.get("sender_id", "")
 
         if notification_id:
             # Real-time notification
             asyncio.create_task(
-                self.push_realtime(notification_id, title, content, level, source_id, extra)
+                self.push_realtime(notification_id, title, content, level, source_id, extra, sender=sender)
             )
         else:
             # Regular notification
             asyncio.create_task(
-                self.push_regular(title, content, level, source_id, extra)
+                self.push_regular(title, content, level, source_id, extra, sender=sender)
             )
 
     async def _push_to_groups(

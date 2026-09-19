@@ -429,5 +429,26 @@ def init():
     click.echo(f"Database initialized at {db.DB_PATH}")
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  token — manage API authentication token
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+@main.command()
+@click.option("--regenerate", "-r", is_flag=True, help="Generate a new token")
+def token(regenerate: bool):
+    """Show or regenerate the API authentication token."""
+    from .core.config import get_token, regenerate_token
+
+    if regenerate:
+        new_token = regenerate_token()
+        click.echo(f"New token: {new_token}")
+        click.echo("⚠️  Previous token is now invalid. Update all clients.")
+    else:
+        t = get_token()
+        click.echo(f"Token: {t}")
+        click.echo("\nUse this token in the web UI login or as 'Authorization: Bearer <token>' header.")
+
+
 if __name__ == "__main__":
     main()

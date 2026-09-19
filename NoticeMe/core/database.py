@@ -17,6 +17,7 @@ from .models import (
     GroupCreate,
     GroupUpdate,
     HistoryEntry,
+    NotifierInfo,
     RealtimeNotification,
     SourceInfo,
     SourceCreate,
@@ -89,8 +90,16 @@ CREATE TABLE IF NOT EXISTS history (
     content         TEXT NOT NULL,
     level           TEXT DEFAULT 'info',
     source_id       TEXT,
+    sender          TEXT DEFAULT '',
     extra           TEXT DEFAULT '{}',
     created_at      TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sender_channels (
+    sender_id   TEXT NOT NULL,
+    channel_id  TEXT NOT NULL,
+    PRIMARY KEY (sender_id, channel_id),
+    FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
 );
 """
 
@@ -109,8 +118,21 @@ def init_db() -> None:
     try:
         conn.executescript(SCHEMA)
         conn.commit()
+        # Migration: add sender column to history if missing
+        _migrate(conn)
     finally:
         conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Run lightweight migrations for schema changes."""
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(history)").fetchall()}
+        if "sender" not in cols:
+            conn.execute("ALTER TABLE history ADD COLUMN sender TEXT DEFAULT ''")
+            conn.commit()
+    except Exception:
+        pass  # Table might not exist yet (fresh DB), schema handles it
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
@@ -551,6 +573,7 @@ def _row_to_history(row: sqlite3.Row) -> HistoryEntry:
         content=row["content"],
         level=row["level"],
         source_id=row["source_id"],
+        sender=row["sender"] if "sender" in row.keys() else "",
         extra=json.loads(row["extra"]),
         created_at=row["created_at"],
     )
@@ -563,13 +586,14 @@ def add_history(
     level: str = "info",
     notification_id: Optional[str] = None,
     source_id: Optional[str] = None,
+    sender: str = "",
     extra: Optional[dict[str, Any]] = None,
 ) -> None:
     conn = _get_conn()
     try:
         conn.execute(
-            "INSERT INTO history (notification_id, action, title, content, level, source_id, extra) VALUES (?,?,?,?,?,?,?)",
-            (notification_id, action, title, content, level, source_id, json.dumps(extra or {})),
+            "INSERT INTO history (notification_id, action, title, content, level, source_id, sender, extra) VALUES (?,?,?,?,?,?,?,?)",
+            (notification_id, action, title, content, level, source_id, sender, json.dumps(extra or {})),
         )
         conn.commit()
     finally:
@@ -595,5 +619,105 @@ def get_history_for_notification(notification_id: str) -> list[HistoryEntry]:
             (notification_id,),
         ).fetchall()
         return [_row_to_history(r) for r in rows]
+    finally:
+        conn.close()
+
+
+# ── Notifiers (Sender Channels) ────────────────────────────────────────
+
+def list_notifiers() -> list[NotifierInfo]:
+    """List all notifiers: unique senders from history, cross-referenced with sender_channels."""
+    conn = _get_conn()
+    try:
+        # Get all unique senders from history (both from sender column and extra JSON)
+        rows = conn.execute(
+            "SELECT DISTINCT sender FROM history WHERE sender != '' AND sender IS NOT NULL"
+        ).fetchall()
+        senders_from_col = {r["sender"] for r in rows}
+
+        # Also extract from extra JSON for backward compat
+        extra_rows = conn.execute(
+            "SELECT extra FROM history WHERE extra != '{}'"
+        ).fetchall()
+        senders_from_extra: set[str] = set()
+        for r in extra_rows:
+            try:
+                extra = json.loads(r["extra"])
+                sid = extra.get("sender_id", "")
+                if sid:
+                    senders_from_extra.add(sid)
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        all_senders = senders_from_col | senders_from_extra
+
+        # Get configured sender_channels
+        sc_rows = conn.execute("SELECT DISTINCT sender_id FROM sender_channels").fetchall()
+        configured_senders = {r["sender_id"] for r in sc_rows}
+
+        # Build notifier list
+        notifiers: list[NotifierInfo] = []
+        for sender_id in sorted(all_senders | configured_senders):
+            channel_ids = get_sender_channels(sender_id)
+            in_history = sender_id in all_senders
+            has_channels = len(channel_ids) > 0
+
+            if in_history and has_channels:
+                status = "green"
+            elif has_channels and not in_history:
+                status = "yellow"
+            else:
+                status = "gray"
+
+            # Get last notification info
+            last_row = conn.execute(
+                "SELECT title, content, created_at FROM history WHERE sender = ? ORDER BY id DESC LIMIT 1",
+                (sender_id,),
+            ).fetchone()
+
+            # Also try extra JSON for last notification
+            if not last_row:
+                last_row = conn.execute(
+                    "SELECT title, content, created_at FROM history WHERE extra LIKE ? ORDER BY id DESC LIMIT 1",
+                    (f'%"sender_id": "{sender_id}"%',),
+                ).fetchone()
+
+            notifiers.append(NotifierInfo(
+                sender_id=sender_id,
+                status=status,
+                channel_ids=channel_ids,
+                last_title=last_row["title"] if last_row else "",
+                last_content=last_row["content"] if last_row else "",
+                last_time=last_row["created_at"] if last_row else "",
+            ))
+
+        return notifiers
+    finally:
+        conn.close()
+
+
+def get_sender_channels(sender_id: str) -> list[str]:
+    """Get channel IDs mapped to a sender."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT channel_id FROM sender_channels WHERE sender_id = ?", (sender_id,)
+        ).fetchall()
+        return [r["channel_id"] for r in rows]
+    finally:
+        conn.close()
+
+
+def set_sender_channels(sender_id: str, channel_ids: list[str]) -> None:
+    """Replace channel mappings for a sender."""
+    conn = _get_conn()
+    try:
+        conn.execute("DELETE FROM sender_channels WHERE sender_id = ?", (sender_id,))
+        for cid in channel_ids:
+            conn.execute(
+                "INSERT OR IGNORE INTO sender_channels (sender_id, channel_id) VALUES (?,?)",
+                (sender_id, cid),
+            )
+        conn.commit()
     finally:
         conn.close()

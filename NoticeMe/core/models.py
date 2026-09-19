@@ -170,8 +170,20 @@ class HistoryEntry(BaseModel):
     content: str
     level: str
     source_id: Optional[str] = None
+    sender: str = ""
     extra: dict[str, Any] = Field(default_factory=dict)
     created_at: str
+
+
+# ── Notifier ───────────────────────────────────────────────────────────
+
+class NotifierInfo(BaseModel):
+    sender_id: str
+    status: str  # "green" | "yellow" | "gray"
+    channel_ids: list[str] = Field(default_factory=list)
+    last_title: str = ""
+    last_content: str = ""
+    last_time: str = ""
 
 
 # ── WebSocket Events ───────────────────────────────────────────────────

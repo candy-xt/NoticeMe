@@ -9,10 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import __version__
+from .core.config import verify_token
 from .core.manager import manager
 from .core.models import (
     ChannelCreate,
@@ -28,9 +30,35 @@ from .core.models import (
 STATIC_DIR = Path(__file__).parent / "static"
 DATA_DIR = Path.home() / ".noticeme"
 
+# Paths that don't require authentication
+_PUBLIC_PATHS = {"/", "/login", "/api/auth/verify", "/hook"}
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    """Check Bearer token on /api/* routes. Skip public paths and /hook/* (webhooks)."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        # Allow public paths and webhook endpoints
+        if path in _PUBLIC_PATHS or path.startswith("/hook/") or path.startswith("/static"):
+            return await call_next(request)
+        # Check token on /api/* routes
+        if path.startswith("/api/"):
+            auth = request.headers.get("authorization", "")
+            if auth.startswith("Bearer "):
+                token = auth[7:]
+            else:
+                token = request.query_params.get("token", "")
+            if not verify_token(token):
+                return JSONResponse(status_code=401, content={"ok": False, "detail": "Invalid or missing token"})
+        return await call_next(request)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Ensure config exists on startup
+    from .core.config import load_config
+    load_config()
     await manager.start()
     yield
     await manager.stop()
@@ -44,6 +72,8 @@ def create_app() -> FastAPI:
         version=__version__,
         lifespan=lifespan,
     )
+
+    app.add_middleware(AuthMiddleware)
 
     _register_routes(app)
     _register_static(app)
@@ -69,6 +99,15 @@ def _register_static(app: FastAPI) -> None:
 
 
 def _register_routes(app: FastAPI) -> None:
+    # ── Auth ───────────────────────────────────────────────────
+
+    @app.post("/api/auth/verify")
+    async def api_auth_verify(body: dict[str, Any]):
+        token = body.get("token", "")
+        if verify_token(token):
+            return {"ok": True}
+        raise HTTPException(401, "Invalid token")
+
     # ── Sources ────────────────────────────────────────────────
 
     @app.get("/api/sources")
@@ -254,6 +293,23 @@ def _register_routes(app: FastAPI) -> None:
         results = await manager.push_regular(title, content, level, source_id, extra, group_ids=group_ids)
         return {"ok": True, "data": [r.model_dump() for r in results]}
 
+    # ── Notifiers ───────────────────────────────────────────────
+
+    @app.get("/api/notifiers")
+    async def api_list_notifiers():
+        notifiers = manager.list_notifiers()
+        return {"ok": True, "data": [n.model_dump() for n in notifiers]}
+
+    @app.get("/api/notifiers/{sender_id}/channels")
+    async def api_get_sender_channels(sender_id: str):
+        channel_ids = manager.get_sender_channels(sender_id)
+        return {"ok": True, "data": channel_ids}
+
+    @app.put("/api/notifiers/{sender_id}/channels")
+    async def api_set_sender_channels(sender_id: str, body: dict[str, Any]):
+        manager.set_sender_channels(sender_id, body.get("channel_ids", []))
+        return {"ok": True}
+
     # ── History ────────────────────────────────────────────────
 
     @app.get("/api/history")
@@ -287,6 +343,11 @@ def _register_routes(app: FastAPI) -> None:
 
     @app.websocket("/ws")
     async def ws_notifications(websocket: WebSocket):
+        # Authenticate via query param
+        token = websocket.query_params.get("token", "")
+        if not verify_token(token):
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
         await websocket.accept()
         queue = manager.subscribe_ws()
         try:

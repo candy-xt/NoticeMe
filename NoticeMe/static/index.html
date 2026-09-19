@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NoticeMe</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script>
     tailwind.config = {
@@ -56,6 +57,34 @@
 <body class="bg-lsurface text-gray-800 dark:bg-surface dark:text-gray-200 min-h-screen transition-colors"
       x-data="noticeMe()" x-init="init()">
 
+  <!-- ═══ Login Page ═══ -->
+  <div x-show="!authenticated" x-cloak class="min-h-screen flex items-center justify-center px-4">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-2xl w-full max-w-sm p-6 sm:p-8 shadow-2xl">
+      <div class="flex items-center gap-3 mb-6 justify-center">
+        <div class="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-white font-bold text-lg">N</div>
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-white">NoticeMe</h1>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">访问令牌</label>
+          <input x-model="loginToken" type="password" placeholder="输入 Token"
+            @keydown.enter="doLogin()"
+            class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2.5 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+        </div>
+        <p x-show="loginError" class="text-xs text-danger" x-text="loginError"></p>
+        <button @click="doLogin()"
+          class="w-full px-4 py-2.5 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors">
+          登录
+        </button>
+      </div>
+      <p class="text-xs text-gray-400 dark:text-gray-500 text-center mt-4">
+        使用 <code class="mono bg-lsurface-3 dark:bg-surface-3 px-1 rounded">nme token</code> 命令查看令牌
+      </p>
+    </div>
+  </div>
+
+  <!-- ═══ Main App (shown after login) ═══ -->
+  <div x-show="authenticated">
   <!-- Header -->
   <header class="border-b border-lsurface-3 dark:border-surface-3 bg-lsurface-2 dark:bg-surface-2 sticky top-0 z-30">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
@@ -65,7 +94,8 @@
           <h1 class="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">NoticeMe</h1>
           <span class="text-xs text-gray-400 hidden sm:inline ml-1">v0.2.1</span>
         </div>
-        <!-- Theme toggle -->
+        <!-- Theme toggle + Logout -->
+        <div class="flex items-center gap-1">
         <button @click="toggleTheme()" class="p-2 rounded-lg bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 transition-colors" title="切换主题">
           <svg x-show="dark" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
@@ -74,6 +104,10 @@
             <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
           </svg>
         </button>
+        <button @click="doLogout()" class="p-2 rounded-lg bg-lsurface-3 dark:bg-surface-3 hover:bg-danger/20 text-gray-400 hover:text-danger transition-colors" title="退出登录">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        </button>
+        </div>
       </div>
       <!-- Nav tabs — scrollable on mobile -->
       <nav class="flex items-center gap-1 overflow-x-auto -mx-1 px-1 pb-1 sm:pb-0 sm:overflow-visible scrollbar-none">
@@ -287,6 +321,54 @@
       </div>
     </div>
 
+    <!-- ═══ Notifiers Tab ═══ -->
+    <div x-show="currentTab === 'notifiers'">
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">通知者</h2>
+        <p class="text-xs text-gray-400 dark:text-gray-500">自动从通知历史中发现，可配置推送渠道</p>
+      </div>
+
+      <!-- Status legend -->
+      <div class="flex flex-wrap items-center gap-4 mb-4 text-xs text-gray-500 dark:text-gray-400">
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-success shadow-[0_0_6px_#22c55e88]"></span>有历史 + 有渠道</span>
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-warn shadow-[0_0_6px_#f59e0b88]"></span>有渠道 + 无历史</span>
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-gray-500"></span>有历史 + 无渠道</span>
+      </div>
+
+      <div x-show="notifiers.length === 0" class="text-center py-16 text-gray-400 dark:text-gray-500">
+        <p class="text-sm">暂无通知者</p>
+        <p class="text-xs mt-1">通知者从通知历史的 sender 字段自动发现</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="n in notifiers" :key="n.sender_id">
+          <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl p-5 card-enter hover:border-lsurface-4 dark:hover:border-surface-4 transition-colors">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  :class="{
+                    'bg-success shadow-[0_0_6px_#22c55e88]': n.status === 'green',
+                    'bg-warn shadow-[0_0_6px_#f59e0b88]': n.status === 'yellow',
+                    'bg-gray-500': n.status === 'gray',
+                  }"></span>
+                <h3 class="font-semibold text-gray-900 dark:text-white truncate mono text-sm" x-text="n.sender_id"></h3>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-accent/15 text-accent-glow" x-text="n.channel_ids.length + ' 渠道'"></span>
+            </div>
+            <div x-show="n.last_title" class="bg-lsurface dark:bg-surface rounded-lg px-3 py-2 mb-3">
+              <p class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate" x-text="n.last_title"></p>
+              <p class="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5" x-text="n.last_content"></p>
+              <p class="text-xs text-gray-400 dark:text-gray-600 mt-1" x-text="n.last_time ? fmtTime(n.last_time) : ''"></p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="showNotifierChannelMapping(n)"
+                class="flex-1 px-3 py-1.5 bg-warn/15 hover:bg-warn/25 text-warn text-xs font-medium rounded-lg transition-colors">渠道配置</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- ═══ History Tab ═══ -->
     <div x-show="currentTab === 'history'">
       <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
@@ -320,6 +402,7 @@
       </div>
     </div>
   </main>
+  </div> <!-- end authenticated wrapper -->
 
   <!-- ═══ Push Modal ═══ -->
   <div x-show="showPush" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showPush = false">
@@ -450,6 +533,58 @@
           <div>
             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">密码（可选）</label>
             <input x-model="sourceForm.password" type="password" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+        </div>
+        <!-- Template config (collapsible) -->
+        <div class="pt-2 border-t border-lsurface-3 dark:border-surface-3">
+          <button @click="sourceForm._showTemplate = !sourceForm._showTemplate" type="button"
+            class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors w-full">
+            <svg class="w-3.5 h-3.5 transition-transform" :class="sourceForm._showTemplate && 'rotate-90'" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+            消息模板配置
+            <span class="text-gray-400 dark:text-gray-600">（自定义消息解析）</span>
+          </button>
+          <div x-show="sourceForm._showTemplate" x-collapse class="mt-3 space-y-3">
+            <div>
+              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">解析模式</label>
+              <select x-model="sourceForm.templateMode" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
+                <option value="json">JSON 模式</option>
+                <option value="text">纯文本模式</option>
+              </select>
+            </div>
+            <!-- JSON mode fields -->
+            <div x-show="sourceForm.templateMode === 'json'" class="space-y-2">
+              <div>
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">标题字段名</label>
+                <input x-model="sourceForm.tplTitleField" placeholder="title" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+              </div>
+              <div>
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">内容字段名</label>
+                <input x-model="sourceForm.tplContentField" placeholder="content" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+              </div>
+              <div>
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">通知 ID 字段名 <span class="text-gray-400 dark:text-gray-600">（有此字段 = 实时通知）</span></label>
+                <input x-model="sourceForm.tplIdField" placeholder="id" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+              </div>
+              <div>
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">发送者字段名</label>
+                <input x-model="sourceForm.tplSenderField" placeholder="sender" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+              </div>
+              <div>
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">级别字段名</label>
+                <input x-model="sourceForm.tplLevelField" placeholder="level" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+              </div>
+            </div>
+            <!-- Text mode fields -->
+            <div x-show="sourceForm.templateMode === 'text'" class="space-y-2">
+              <div>
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">发送者字段名 <span class="text-gray-400 dark:text-gray-600">（如果消息含此字段）</span></label>
+                <input x-model="sourceForm.tplSenderField" placeholder="sender" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+              </div>
+            </div>
+            <div>
+              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">默认标题</label>
+              <input x-model="sourceForm.tplDefaultTitle" placeholder="通知" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+            </div>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -618,15 +753,49 @@
     </div>
   </div>
 
+  <!-- ═══ Notifier Channel Mapping Modal ═══ -->
+  <div x-show="showNotifierChModal" x-cloak class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showNotifierChModal = false">
+    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-t-2xl sm:rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto scroll-thin">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">配置通知者渠道</h2>
+      <p class="text-xs text-gray-400 mb-5">为 <span class="text-accent font-medium mono" x-text="notifierChSource?.sender_id"></span> 配置推送渠道</p>
+      <div class="space-y-2 max-h-60 overflow-y-auto scroll-thin">
+        <template x-for="c in channels" :key="c.id">
+          <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-lsurface-3 dark:hover:bg-surface-3 cursor-pointer transition-colors">
+            <input type="checkbox" :value="c.id" x-model="notifierChSelected"
+              class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="c.name"></p>
+              <p class="text-xs text-gray-400 mono" x-text="c.type"></p>
+            </div>
+          </label>
+        </template>
+      </div>
+      <div x-show="channels.length === 0" class="text-center py-8 text-gray-400 text-sm">
+        还没有渠道，请先创建
+      </div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button @click="showNotifierChModal = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
+        <button @click="doSaveNotifierChannels()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors">保存</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     function noticeMe() {
       return {
+        // Auth
+        authenticated: false,
+        token: '',
+        loginToken: '',
+        loginError: '',
+
         // Navigation
         tabs: [
           { id: 'dashboard', label: '仪表盘' },
           { id: 'sources',   label: '通知源' },
           { id: 'groups',    label: '通知组' },
           { id: 'channels',  label: '通知渠道' },
+          { id: 'notifiers', label: '通知者' },
           { id: 'history',   label: '历史记录' },
         ],
         currentTab: 'dashboard',
@@ -637,6 +806,7 @@
         sources: [],
         groups: [],
         channels: [],
+        notifiers: [],
         history: [],
 
         // WebSocket
@@ -650,24 +820,93 @@
         showGroupForm: false,
         showChannelForm: false,
         showMappingModal: false,
+        showNotifierChModal: false,
+        notifierChSource: null,
+        notifierChSelected: [],
 
         // Forms
         pushForm: { type: 'regular', id: '', title: '', content: '', level: 'info', groupIds: [] },
         editRTForm: { id: '', title: '', content: '', level: 'info' },
-        sourceForm: { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', username: '', password: '' },
+        sourceForm: { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', username: '', password: '',
+          _showTemplate: false, templateMode: 'json', tplTitleField: 'title', tplContentField: 'content', tplIdField: 'id', tplSenderField: 'sender', tplLevelField: 'level', tplDefaultTitle: '通知' },
         groupForm: { _edit: null, name: '', description: '', enabled: true },
         channelForm: { _edit: null, name: '', type: 'api', enabled: true, url: '', method: 'POST', headersStr: '', bodyTemplate: '', broker: '', port: '1883', topic: '', username: '', password: '' },
         mappingSource: null,
         mappingSelected: [],
+
+        // ── Auth helpers ──────────────────────────────────────
+        _headers() {
+          return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + this.token };
+        },
+        async _fetch(url, opts = {}) {
+          if (!opts.headers) opts.headers = this._headers();
+          const resp = await fetch(url, opts);
+          if (resp.status === 401) {
+            this.authenticated = false;
+            this.token = '';
+            localStorage.removeItem('nm-token');
+            this.loginError = '令牌已过期，请重新登录';
+            throw new Error('Unauthorized');
+          }
+          return resp;
+        },
+
+        async doLogin() {
+          this.loginError = '';
+          if (!this.loginToken) { this.loginError = '请输入令牌'; return; }
+          try {
+            const resp = await fetch('/api/auth/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: this.loginToken }),
+            });
+            if (resp.ok) {
+              this.token = this.loginToken;
+              localStorage.setItem('nm-token', this.token);
+              this.authenticated = true;
+              this.loginToken = '';
+              this.connectWS();
+              this.refresh();
+            } else {
+              this.loginError = '令牌无效';
+            }
+          } catch (e) {
+            this.loginError = '连接失败';
+          }
+        },
+        doLogout() {
+          this.authenticated = false;
+          this.token = '';
+          localStorage.removeItem('nm-token');
+          if (this.ws) { this.ws.close(); this.ws = null; }
+        },
 
         // ── Init ───────────────────────────────────────────────
         init() {
           const saved = localStorage.getItem('nm-theme');
           this.dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
           this.applyTheme();
-          this.connectWS();
-          this.refresh();
-          setInterval(() => this.refresh(), 10000);
+          // Check saved token
+          const savedToken = localStorage.getItem('nm-token');
+          if (savedToken) {
+            this.token = savedToken;
+            // Verify token is still valid
+            fetch('/api/auth/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: this.token }),
+            }).then(r => {
+              if (r.ok) {
+                this.authenticated = true;
+                this.connectWS();
+                this.refresh();
+                setInterval(() => this.refresh(), 10000);
+              } else {
+                localStorage.removeItem('nm-token');
+                this.token = '';
+              }
+            }).catch(() => {});
+          }
         },
 
         toggleTheme() {
@@ -680,7 +919,7 @@
         // ── WebSocket ─────────────────────────────────────────
         connectWS() {
           const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-          this.ws = new WebSocket(`${proto}//${location.host}/ws`);
+          this.ws = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(this.token)}`);
           this.ws.onopen = () => { this.wsConnected = true; };
           this.ws.onclose = () => {
             this.wsConnected = false;
@@ -719,22 +958,24 @@
         // ── Refresh ───────────────────────────────────────────
         async refresh() {
           try {
-            const [rt, src, grp, ch] = await Promise.all([
-              fetch('/api/notifications/realtime').then(r => r.json()),
-              fetch('/api/sources').then(r => r.json()),
-              fetch('/api/groups').then(r => r.json()),
-              fetch('/api/channels').then(r => r.json()),
+            const [rt, src, grp, ch, nt] = await Promise.all([
+              this._fetch('/api/notifications/realtime').then(r => r.json()),
+              this._fetch('/api/sources').then(r => r.json()),
+              this._fetch('/api/groups').then(r => r.json()),
+              this._fetch('/api/channels').then(r => r.json()),
+              this._fetch('/api/notifiers').then(r => r.json()),
             ]);
             if (rt.ok) this.realtimeNotifs = rt.data;
             if (src.ok) this.sources = src.data;
             if (grp.ok) this.groups = grp.data;
             if (ch.ok) this.channels = ch.data;
+            if (nt.ok) this.notifiers = nt.data;
           } catch (e) { /* ignore */ }
         },
 
         async loadHistory() {
           try {
-            const r = await fetch('/api/history?limit=200');
+            const r = await this._fetch('/api/history?limit=200');
             const j = await r.json();
             if (j.ok) this.history = j.data;
           } catch (e) {}
@@ -754,15 +995,13 @@
           if (this.pushForm.type === 'realtime') {
             if (!this.pushForm.id) return;
             payload.id = this.pushForm.id;
-            await fetch('/api/notifications/realtime', {
+            await this._fetch('/api/notifications/realtime', {
               method: 'POST',
-              headers: {'Content-Type':'application/json'},
               body: JSON.stringify(payload),
             });
           } else {
-            await fetch('/api/notifications/push', {
+            await this._fetch('/api/notifications/push', {
               method: 'POST',
-              headers: {'Content-Type':'application/json'},
               body: JSON.stringify(payload),
             });
           }
@@ -777,9 +1016,8 @@
           this.showEditRT = true;
         },
         async doEditRT() {
-          await fetch(`/api/notifications/realtime/${this.editRTForm.id}`, {
+          await this._fetch(`/api/notifications/realtime/${this.editRTForm.id}`, {
             method: 'PUT',
-            headers: {'Content-Type':'application/json'},
             body: JSON.stringify({
               title: this.editRTForm.title,
               content: this.editRTForm.content,
@@ -790,19 +1028,21 @@
           await this.refresh();
         },
         async clearRealtime(id) {
-          await fetch(`/api/notifications/realtime/${id}`, { method: 'DELETE' });
+          await this._fetch(`/api/notifications/realtime/${id}`, { method: 'DELETE' });
           await this.refresh();
         },
         async clearAllRealtime() {
-          await fetch('/api/notifications/realtime', { method: 'DELETE' });
+          await this._fetch('/api/notifications/realtime', { method: 'DELETE' });
           await this.refresh();
         },
 
         // ── Source CRUD ───────────────────────────────────────
         resetSourceForm() {
-          this.sourceForm = { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', username: '', password: '' };
+          this.sourceForm = { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', username: '', password: '',
+            _showTemplate: false, templateMode: 'json', tplTitleField: 'title', tplContentField: 'content', tplIdField: 'id', tplSenderField: 'sender', tplLevelField: 'level', tplDefaultTitle: '通知' };
         },
         editSource(s) {
+          const tpl = s.config.template || {};
           this.sourceForm = {
             _edit: s.id,
             name: s.name,
@@ -813,6 +1053,14 @@
             topic: s.config.topic || '',
             username: s.config.username || '',
             password: s.config.password || '',
+            _showTemplate: !!s.config.template,
+            templateMode: tpl.mode || 'json',
+            tplTitleField: tpl.title_field || 'title',
+            tplContentField: tpl.content_field || 'content',
+            tplIdField: tpl.id_field || 'id',
+            tplSenderField: tpl.sender_field || 'sender',
+            tplLevelField: tpl.level_field || 'level',
+            tplDefaultTitle: tpl.default_title || '通知',
           };
           this.showSourceForm = true;
         },
@@ -825,6 +1073,21 @@
             if (this.sourceForm.username) cfg.username = this.sourceForm.username;
             if (this.sourceForm.password) cfg.password = this.sourceForm.password;
           }
+          // Template config
+          if (this.sourceForm._showTemplate) {
+            const tpl = { mode: this.sourceForm.templateMode };
+            if (this.sourceForm.templateMode === 'json') {
+              if (this.sourceForm.tplTitleField) tpl.title_field = this.sourceForm.tplTitleField;
+              if (this.sourceForm.tplContentField) tpl.content_field = this.sourceForm.tplContentField;
+              if (this.sourceForm.tplIdField) tpl.id_field = this.sourceForm.tplIdField;
+              if (this.sourceForm.tplSenderField) tpl.sender_field = this.sourceForm.tplSenderField;
+              if (this.sourceForm.tplLevelField) tpl.level_field = this.sourceForm.tplLevelField;
+            } else {
+              if (this.sourceForm.tplSenderField) tpl.sender_field = this.sourceForm.tplSenderField;
+            }
+            if (this.sourceForm.tplDefaultTitle) tpl.default_title = this.sourceForm.tplDefaultTitle;
+            cfg.template = tpl;
+          }
           const body = {
             name: this.sourceForm.name,
             type: this.sourceForm.type,
@@ -832,12 +1095,12 @@
             config: cfg,
           };
           if (this.sourceForm._edit) {
-            await fetch(`/api/sources/${this.sourceForm._edit}`, {
-              method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+            await this._fetch(`/api/sources/${this.sourceForm._edit}`, {
+              method: 'PUT', body: JSON.stringify(body),
             });
           } else {
-            await fetch('/api/sources', {
-              method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+            await this._fetch('/api/sources', {
+              method: 'POST', body: JSON.stringify(body),
             });
           }
           this.showSourceForm = false;
@@ -845,7 +1108,7 @@
         },
         async deleteSource(id) {
           if (!confirm('确定删除此通知源？')) return;
-          await fetch(`/api/sources/${id}`, { method: 'DELETE' });
+          await this._fetch(`/api/sources/${id}`, { method: 'DELETE' });
           await this.refresh();
         },
 
@@ -860,16 +1123,16 @@
         async doSaveGroup() {
           const body = { name: this.groupForm.name, description: this.groupForm.description, enabled: this.groupForm.enabled };
           if (this.groupForm._edit) {
-            await fetch(`/api/groups/${this.groupForm._edit}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            await this._fetch(`/api/groups/${this.groupForm._edit}`, { method: 'PUT', body: JSON.stringify(body) });
           } else {
-            await fetch('/api/groups', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            await this._fetch('/api/groups', { method: 'POST', body: JSON.stringify(body) });
           }
           this.showGroupForm = false;
           await this.refresh();
         },
         async deleteGroup(id) {
           if (!confirm('确定删除此通知组？')) return;
-          await fetch(`/api/groups/${id}`, { method: 'DELETE' });
+          await this._fetch(`/api/groups/${id}`, { method: 'DELETE' });
           await this.refresh();
         },
 
@@ -881,15 +1144,15 @@
           this.groupChSource = g;
           this.groupChSelected = [];
           try {
-            const r = await fetch(`/api/groups/${g.id}/channels`);
+            const r = await this._fetch(`/api/groups/${g.id}/channels`);
             const j = await r.json();
             if (j.ok) this.groupChSelected = j.data;
           } catch(e) {}
           this.showGroupChModal = true;
         },
         async doSaveGroupChannels() {
-          await fetch(`/api/groups/${this.groupChSource.id}/channels`, {
-            method: 'PUT', headers: {'Content-Type':'application/json'},
+          await this._fetch(`/api/groups/${this.groupChSource.id}/channels`, {
+            method: 'PUT',
             body: JSON.stringify({ channel_ids: this.groupChSelected }),
           });
           this.showGroupChModal = false;
@@ -941,12 +1204,12 @@
             config: cfg,
           };
           if (this.channelForm._edit) {
-            await fetch(`/api/channels/${this.channelForm._edit}`, {
-              method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+            await this._fetch(`/api/channels/${this.channelForm._edit}`, {
+              method: 'PUT', body: JSON.stringify(body),
             });
           } else {
-            await fetch('/api/channels', {
-              method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+            await this._fetch('/api/channels', {
+              method: 'POST', body: JSON.stringify(body),
             });
           }
           this.showChannelForm = false;
@@ -954,7 +1217,27 @@
         },
         async deleteChannel(id) {
           if (!confirm('确定删除此渠道？')) return;
-          await fetch(`/api/channels/${id}`, { method: 'DELETE' });
+          await this._fetch(`/api/channels/${id}`, { method: 'DELETE' });
+          await this.refresh();
+        },
+
+        // ── Notifier Channel Mapping ─────────────────────────
+        async showNotifierChannelMapping(n) {
+          this.notifierChSource = n;
+          this.notifierChSelected = [];
+          try {
+            const r = await this._fetch(`/api/notifiers/${encodeURIComponent(n.sender_id)}/channels`);
+            const j = await r.json();
+            if (j.ok) this.notifierChSelected = j.data;
+          } catch(e) {}
+          this.showNotifierChModal = true;
+        },
+        async doSaveNotifierChannels() {
+          await this._fetch(`/api/notifiers/${encodeURIComponent(this.notifierChSource.sender_id)}/channels`, {
+            method: 'PUT',
+            body: JSON.stringify({ channel_ids: this.notifierChSelected }),
+          });
+          this.showNotifierChModal = false;
           await this.refresh();
         },
 
@@ -963,29 +1246,19 @@
           this.mappingSource = s;
           this.mappingSelected = [];
           try {
-            const r = await fetch(`/api/sources/${s.id}/groups`);
+            const r = await this._fetch(`/api/sources/${s.id}/groups`);
             const j = await r.json();
             if (j.ok) this.mappingSelected = j.data;
           } catch(e) {}
           this.showMappingModal = true;
         },
         async doSaveMapping() {
-          await fetch(`/api/sources/${this.mappingSource.id}/groups`, {
+          await this._fetch(`/api/sources/${this.mappingSource.id}/groups`, {
             method: 'PUT',
-            headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ group_ids: this.mappingSelected }),
           });
           this.showMappingModal = false;
           await this.refresh();
-        },
-
-        // ── History ───────────────────────────────────────────
-        async loadHistory() {
-          try {
-            const r = await fetch('/api/history?limit=200');
-            const j = await r.json();
-            if (j.ok) this.history = j.data;
-          } catch(e) {}
         },
 
         // ── Helpers ───────────────────────────────────────────
