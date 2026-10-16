@@ -52,15 +52,8 @@ CREATE TABLE IF NOT EXISTS groups (
     name        TEXT NOT NULL,
     description TEXT DEFAULT '',
     enabled     INTEGER DEFAULT 1,
+    is_default  INTEGER DEFAULT 0,
     created_at  TEXT DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS source_groups (
-    source_id TEXT NOT NULL,
-    group_id  TEXT NOT NULL,
-    PRIMARY KEY (source_id, group_id),
-    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
-    FOREIGN KEY (group_id)  REFERENCES groups(id)  ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS group_channels (
@@ -95,11 +88,11 @@ CREATE TABLE IF NOT EXISTS history (
     created_at      TEXT DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS sender_channels (
-    sender_id   TEXT NOT NULL,
-    channel_id  TEXT NOT NULL,
-    PRIMARY KEY (sender_id, channel_id),
-    FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS sender_groups (
+    sender_id TEXT NOT NULL,
+    group_id  TEXT NOT NULL,
+    PRIMARY KEY (sender_id, group_id),
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
 );
 """
 
@@ -133,6 +126,28 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.commit()
     except Exception:
         pass  # Table might not exist yet (fresh DB), schema handles it
+
+    # groups.is_default marks the default group (renamed from is_fallback in 0.3.0).
+    # The default group is chosen by the user; nothing is auto-created.
+    try:
+        gcols = {row[1] for row in conn.execute("PRAGMA table_info(groups)").fetchall()}
+        if "is_default" not in gcols:
+            if "is_fallback" in gcols:
+                conn.execute("ALTER TABLE groups RENAME COLUMN is_fallback TO is_default")
+            else:
+                conn.execute("ALTER TABLE groups ADD COLUMN is_default INTEGER DEFAULT 0")
+            conn.commit()
+    except Exception:
+        pass
+
+    # Legacy tables: sources no longer map to groups, and notifiers map to
+    # groups (sender_groups) instead of channels (sender_channels).
+    try:
+        for table in ("source_groups", "sender_channels"):
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
+        conn.commit()
+    except Exception:
+        pass
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
@@ -335,6 +350,7 @@ def _row_to_group(row: sqlite3.Row) -> GroupInfo:
         description=row["description"],
         enabled=bool(row["enabled"]),
         channel_ids=get_group_channels(row["id"]),
+        is_default=bool(row["is_default"]) if "is_default" in row.keys() else False,
         created_at=row["created_at"],
     )
 
@@ -342,7 +358,7 @@ def _row_to_group(row: sqlite3.Row) -> GroupInfo:
 def list_groups() -> list[GroupInfo]:
     conn = _get_conn()
     try:
-        rows = conn.execute("SELECT * FROM groups ORDER BY created_at").fetchall()
+        rows = conn.execute("SELECT * FROM groups ORDER BY is_default DESC, created_at").fetchall()
         return [_row_to_group(r) for r in rows]
     finally:
         conn.close()
@@ -353,6 +369,31 @@ def get_group(group_id: str) -> Optional[GroupInfo]:
     try:
         row = conn.execute("SELECT * FROM groups WHERE id = ?", (group_id,)).fetchone()
         return _row_to_group(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_default_group() -> Optional[GroupInfo]:
+    """Return the group designated as the default destination, if any."""
+    conn = _get_conn()
+    try:
+        row = conn.execute("SELECT * FROM groups WHERE is_default = 1 LIMIT 1").fetchone()
+        return _row_to_group(row) if row else None
+    finally:
+        conn.close()
+
+
+def set_default_group(group_id: str) -> bool:
+    """Make ``group_id`` the default group (clears the flag on all others)."""
+    conn = _get_conn()
+    try:
+        exists = conn.execute("SELECT id FROM groups WHERE id = ?", (group_id,)).fetchone()
+        if not exists:
+            return False
+        conn.execute("UPDATE groups SET is_default = 0")
+        conn.execute("UPDATE groups SET is_default = 1 WHERE id = ?", (group_id,))
+        conn.commit()
+        return True
     finally:
         conn.close()
 
@@ -399,8 +440,12 @@ def update_group(group_id: str, data: GroupUpdate) -> Optional[GroupInfo]:
 
 
 def delete_group(group_id: str) -> bool:
+    """Delete a group. The default group is protected and cannot be deleted."""
     conn = _get_conn()
     try:
+        row = conn.execute("SELECT is_default FROM groups WHERE id = ?", (group_id,)).fetchone()
+        if not row or row["is_default"]:
+            return False
         cur = conn.execute("DELETE FROM groups WHERE id = ?", (group_id,))
         conn.commit()
         return cur.rowcount > 0
@@ -433,42 +478,6 @@ def set_group_channels(group_id: str, channel_ids: list[str]) -> None:
         conn.commit()
     finally:
         conn.close()
-
-
-# ── Source ↔ Group Mappings ────────────────────────────────────────────
-
-def get_source_groups(source_id: str) -> list[str]:
-    conn = _get_conn()
-    try:
-        rows = conn.execute(
-            "SELECT group_id FROM source_groups WHERE source_id = ?", (source_id,)
-        ).fetchall()
-        return [r["group_id"] for r in rows]
-    finally:
-        conn.close()
-
-
-def set_source_groups(source_id: str, group_ids: list[str]) -> None:
-    conn = _get_conn()
-    try:
-        conn.execute("DELETE FROM source_groups WHERE source_id = ?", (source_id,))
-        for gid in group_ids:
-            conn.execute(
-                "INSERT OR IGNORE INTO source_groups (source_id, group_id) VALUES (?,?)",
-                (source_id, gid),
-            )
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def get_source_channels(source_id: str) -> list[str]:
-    """Get all channel IDs for a source via its group mappings."""
-    group_ids = get_source_groups(source_id)
-    channel_ids: list[str] = []
-    for gid in group_ids:
-        channel_ids.extend(get_group_channels(gid))
-    return list(set(channel_ids))
 
 
 # ── Real-time Notifications ────────────────────────────────────────────
@@ -623,10 +632,10 @@ def get_history_for_notification(notification_id: str) -> list[HistoryEntry]:
         conn.close()
 
 
-# ── Notifiers (Sender Channels) ────────────────────────────────────────
+# ── Notifiers (Sender → Groups) ────────────────────────────────────────
 
 def list_notifiers() -> list[NotifierInfo]:
-    """List all notifiers: unique senders from history, cross-referenced with sender_channels."""
+    """List all notifiers: unique senders from history, cross-referenced with sender_groups."""
     conn = _get_conn()
     try:
         # Get all unique senders from history (both from sender column and extra JSON)
@@ -651,20 +660,20 @@ def list_notifiers() -> list[NotifierInfo]:
 
         all_senders = senders_from_col | senders_from_extra
 
-        # Get configured sender_channels
-        sc_rows = conn.execute("SELECT DISTINCT sender_id FROM sender_channels").fetchall()
-        configured_senders = {r["sender_id"] for r in sc_rows}
+        # Get configured sender_groups
+        sg_rows = conn.execute("SELECT DISTINCT sender_id FROM sender_groups").fetchall()
+        configured_senders = {r["sender_id"] for r in sg_rows}
 
         # Build notifier list
         notifiers: list[NotifierInfo] = []
         for sender_id in sorted(all_senders | configured_senders):
-            channel_ids = get_sender_channels(sender_id)
+            group_ids = get_sender_groups(sender_id)
             in_history = sender_id in all_senders
-            has_channels = len(channel_ids) > 0
+            has_groups = len(group_ids) > 0
 
-            if in_history and has_channels:
+            if in_history and has_groups:
                 status = "green"
-            elif has_channels and not in_history:
+            elif has_groups and not in_history:
                 status = "yellow"
             else:
                 status = "gray"
@@ -685,7 +694,7 @@ def list_notifiers() -> list[NotifierInfo]:
             notifiers.append(NotifierInfo(
                 sender_id=sender_id,
                 status=status,
-                channel_ids=channel_ids,
+                group_ids=group_ids,
                 last_title=last_row["title"] if last_row else "",
                 last_content=last_row["content"] if last_row else "",
                 last_time=last_row["created_at"] if last_row else "",
@@ -696,27 +705,27 @@ def list_notifiers() -> list[NotifierInfo]:
         conn.close()
 
 
-def get_sender_channels(sender_id: str) -> list[str]:
-    """Get channel IDs mapped to a sender."""
+def get_sender_groups(sender_id: str) -> list[str]:
+    """Get group IDs mapped to a sender."""
     conn = _get_conn()
     try:
         rows = conn.execute(
-            "SELECT channel_id FROM sender_channels WHERE sender_id = ?", (sender_id,)
+            "SELECT group_id FROM sender_groups WHERE sender_id = ?", (sender_id,)
         ).fetchall()
-        return [r["channel_id"] for r in rows]
+        return [r["group_id"] for r in rows]
     finally:
         conn.close()
 
 
-def set_sender_channels(sender_id: str, channel_ids: list[str]) -> None:
-    """Replace channel mappings for a sender."""
+def set_sender_groups(sender_id: str, group_ids: list[str]) -> None:
+    """Replace group mappings for a sender."""
     conn = _get_conn()
     try:
-        conn.execute("DELETE FROM sender_channels WHERE sender_id = ?", (sender_id,))
-        for cid in channel_ids:
+        conn.execute("DELETE FROM sender_groups WHERE sender_id = ?", (sender_id,))
+        for gid in group_ids:
             conn.execute(
-                "INSERT OR IGNORE INTO sender_channels (sender_id, channel_id) VALUES (?,?)",
-                (sender_id, cid),
+                "INSERT OR IGNORE INTO sender_groups (sender_id, group_id) VALUES (?,?)",
+                (sender_id, gid),
             )
         conn.commit()
     finally:

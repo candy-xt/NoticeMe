@@ -11,6 +11,7 @@ from typing import Any, Optional
 from . import database as db
 from .channels import ChannelManager
 from .models import (
+    ChannelCreate,
     ChannelInfo,
     ChannelUpdate,
     GroupCreate,
@@ -121,13 +122,11 @@ class NoticeManager:
     def set_group_channels(self, group_id: str, channel_ids: list[str]) -> None:
         db.set_group_channels(group_id, channel_ids)
 
-    # ── Source ↔ Group Mappings ────────────────────────────────────────
+    def get_default_group(self):
+        return db.get_default_group()
 
-    def get_source_groups(self, source_id: str) -> list[str]:
-        return db.get_source_groups(source_id)
-
-    def set_source_groups(self, source_id: str, group_ids: list[str]) -> None:
-        db.set_source_groups(source_id, group_ids)
+    def set_default_group(self, group_id: str) -> bool:
+        return db.set_default_group(group_id)
 
     # ── Notifications ──────────────────────────────────────────────────
 
@@ -140,6 +139,7 @@ class NoticeManager:
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
         group_ids: Optional[list[str]] = None,
+        channel_ids: Optional[list[str]] = None,
         sender: str = "",
     ) -> RealtimeNotification:
         """Create or update a real-time notification and broadcast via WebSocket."""
@@ -172,17 +172,7 @@ class NoticeManager:
         )
         self._broadcast_ws(event)
 
-        # Route to channels via groups
-        if group_ids:
-            await self._push_to_groups(group_ids, title, content, level, extra)
-        elif source_id:
-            await self._route_to_channels(source_id, title, content, level, extra)
-
-        # Route to sender channels
-        if sender:
-            sender_ch_ids = db.get_sender_channels(sender)
-            if sender_ch_ids:
-                await self._push_to_channels(sender_ch_ids, title, content, level, extra)
+        await self._route(title, content, level, extra, group_ids, channel_ids, sender)
 
         return notif
 
@@ -273,6 +263,7 @@ class NoticeManager:
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
         group_ids: Optional[list[str]] = None,
+        channel_ids: Optional[list[str]] = None,
         sender: str = "",
     ) -> list[PushResult]:
         """Push a regular (fire-and-forget) notification to all mapped channels."""
@@ -298,21 +289,7 @@ class NoticeManager:
         )
         self._broadcast_ws(event)
 
-        # Route to channels via groups
-        results: list[PushResult] = []
-        if group_ids:
-            results = await self._push_to_groups(group_ids, title, content, level, extra)
-        elif source_id:
-            results = await self._route_to_channels(source_id, title, content, level, extra)
-
-        # Route to sender channels
-        if sender:
-            sender_ch_ids = db.get_sender_channels(sender)
-            if sender_ch_ids:
-                sender_results = await self._push_to_channels(sender_ch_ids, title, content, level, extra)
-                results.extend(sender_results)
-
-        return results
+        return await self._route(title, content, level, extra, group_ids, channel_ids, sender)
 
     def list_history(self, limit: int = 100, offset: int = 0) -> list[HistoryEntry]:
         return db.list_history(limit, offset)
@@ -350,11 +327,11 @@ class NoticeManager:
     def list_notifiers(self) -> list:
         return db.list_notifiers()
 
-    def get_sender_channels(self, sender_id: str) -> list[str]:
-        return db.get_sender_channels(sender_id)
+    def get_sender_groups(self, sender_id: str) -> list[str]:
+        return db.get_sender_groups(sender_id)
 
-    def set_sender_channels(self, sender_id: str, channel_ids: list[str]) -> None:
-        db.set_sender_channels(sender_id, channel_ids)
+    def set_sender_groups(self, sender_id: str, group_ids: list[str]) -> None:
+        db.set_sender_groups(sender_id, group_ids)
 
     # ── Internal routing ────────────────────────────────────────────────
 
@@ -378,21 +355,49 @@ class NoticeManager:
                 self.push_regular(title, content, level, source_id, extra, sender=sender)
             )
 
-    async def _push_to_groups(
+    async def _route(
         self,
-        group_ids: list[str],
         title: str,
         content: str,
         level: str,
         extra: Optional[dict[str, Any]],
+        group_ids: Optional[list[str]],
+        channel_ids: Optional[list[str]],
+        sender: str,
     ) -> list[PushResult]:
-        """Push a notification to all channels in the specified groups."""
-        channel_ids: list[str] = []
-        for gid in group_ids:
-            channel_ids.extend(db.get_group_channels(gid))
-        # Deduplicate
-        channel_ids = list(set(channel_ids))
-        return await self._push_to_channels(channel_ids, title, content, level, extra)
+        """Resolve target channels for a notification and push to them.
+
+        Explicit ``group_ids`` / ``channel_ids`` win; otherwise the groups
+        configured on the notifier (``sender``) are used. Sources are ingress
+        only — they never route. When nothing resolves (no target given, or the
+        notifier has no groups bound), the default group is used.
+        """
+        targets: list[str] = []
+
+        if group_ids or channel_ids:
+            for gid in group_ids or []:
+                targets.extend(db.get_group_channels(gid))
+            targets.extend(channel_ids or [])
+        elif sender:
+            for gid in db.get_sender_groups(sender):
+                targets.extend(db.get_group_channels(gid))
+
+        unique: list[str] = []
+        for cid in targets:
+            if cid not in unique:
+                unique.append(cid)
+
+        # Nothing resolved → fall back to the group marked as default (if any).
+        if not unique:
+            default = db.get_default_group()
+            if default:
+                for cid in db.get_group_channels(default.id):
+                    if cid not in unique:
+                        unique.append(cid)
+
+        if not unique:
+            return []
+        return await self._push_to_channels(unique, title, content, level, extra)
 
     async def _push_to_channels(
         self,
@@ -403,27 +408,6 @@ class NoticeManager:
         extra: Optional[dict[str, Any]],
     ) -> list[PushResult]:
         """Push a notification to specific channels by ID."""
-        results: list[PushResult] = []
-        for cid in channel_ids:
-            ch = db.get_channel(cid)
-            if ch and ch.enabled:
-                result = await self.channel_mgr.push(ch, title, content, level, extra)
-                results.append(result)
-        return results
-
-    async def _route_to_channels(
-        self,
-        source_id: str,
-        title: str,
-        content: str,
-        level: str,
-        extra: Optional[dict[str, Any]],
-    ) -> list[PushResult]:
-        """Route a notification to all channels mapped to a source."""
-        channel_ids = db.get_source_channels(source_id)
-        if not channel_ids:
-            return []
-
         results: list[PushResult] = []
         for cid in channel_ids:
             ch = db.get_channel(cid)

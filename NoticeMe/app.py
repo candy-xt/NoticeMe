@@ -140,20 +140,6 @@ def _register_routes(app: FastAPI) -> None:
             raise HTTPException(404, "Source not found")
         return {"ok": True}
 
-    @app.get("/api/sources/{source_id}/groups")
-    async def api_get_source_groups(source_id: str):
-        if not manager.get_source(source_id):
-            raise HTTPException(404, "Source not found")
-        group_ids = manager.get_source_groups(source_id)
-        return {"ok": True, "data": group_ids}
-
-    @app.put("/api/sources/{source_id}/groups")
-    async def api_set_source_groups(source_id: str, body: dict[str, Any]):
-        if not manager.get_source(source_id):
-            raise HTTPException(404, "Source not found")
-        manager.set_source_groups(source_id, body.get("group_ids", []))
-        return {"ok": True}
-
     # ── Channels ───────────────────────────────────────────────
 
     @app.get("/api/channels")
@@ -214,6 +200,11 @@ def _register_routes(app: FastAPI) -> None:
 
     @app.delete("/api/groups/{group_id}")
     async def api_delete_group(group_id: str):
+        g = manager.get_group(group_id)
+        if not g:
+            raise HTTPException(404, "Group not found")
+        if g.is_default:
+            raise HTTPException(400, "默认通知组不可删除，请先把其他组设为默认")
         if not manager.delete_group(group_id):
             raise HTTPException(404, "Group not found")
         return {"ok": True}
@@ -230,6 +221,13 @@ def _register_routes(app: FastAPI) -> None:
         if not manager.get_group(group_id):
             raise HTTPException(404, "Group not found")
         manager.set_group_channels(group_id, body.get("channel_ids", []))
+        return {"ok": True}
+
+    @app.put("/api/groups/{group_id}/default")
+    async def api_set_default_group(group_id: str):
+        """Mark this group as the default used when a notifier has no groups."""
+        if not manager.set_default_group(group_id):
+            raise HTTPException(404, "Group not found")
         return {"ok": True}
 
     # ── Notifications ──────────────────────────────────────────
@@ -258,8 +256,13 @@ def _register_routes(app: FastAPI) -> None:
         level = body.get("level", "info")
         source_id = body.get("source_id")
         group_ids = body.get("group_ids")
+        channel_ids = body.get("channel_ids")
+        sender = body.get("sender", "")
         extra = body.get("extra", {})
-        notif = await manager.push_realtime(nid, title, content, level, source_id, extra, group_ids=group_ids)
+        notif = await manager.push_realtime(
+            nid, title, content, level, source_id, extra,
+            group_ids=group_ids, channel_ids=channel_ids, sender=sender,
+        )
         return {"ok": True, "data": notif.model_dump()}
 
     @app.put("/api/notifications/realtime/{notification_id}")
@@ -289,8 +292,13 @@ def _register_routes(app: FastAPI) -> None:
         level = body.get("level", "info")
         source_id = body.get("source_id")
         group_ids = body.get("group_ids")
+        channel_ids = body.get("channel_ids")
+        sender = body.get("sender", "")
         extra = body.get("extra", {})
-        results = await manager.push_regular(title, content, level, source_id, extra, group_ids=group_ids)
+        results = await manager.push_regular(
+            title, content, level, source_id, extra,
+            group_ids=group_ids, channel_ids=channel_ids, sender=sender,
+        )
         return {"ok": True, "data": [r.model_dump() for r in results]}
 
     # ── Notifiers ───────────────────────────────────────────────
@@ -300,14 +308,14 @@ def _register_routes(app: FastAPI) -> None:
         notifiers = manager.list_notifiers()
         return {"ok": True, "data": [n.model_dump() for n in notifiers]}
 
-    @app.get("/api/notifiers/{sender_id}/channels")
-    async def api_get_sender_channels(sender_id: str):
-        channel_ids = manager.get_sender_channels(sender_id)
-        return {"ok": True, "data": channel_ids}
+    @app.get("/api/notifiers/{sender_id}/groups")
+    async def api_get_sender_groups(sender_id: str):
+        group_ids = manager.get_sender_groups(sender_id)
+        return {"ok": True, "data": group_ids}
 
-    @app.put("/api/notifiers/{sender_id}/channels")
-    async def api_set_sender_channels(sender_id: str, body: dict[str, Any]):
-        manager.set_sender_channels(sender_id, body.get("channel_ids", []))
+    @app.put("/api/notifiers/{sender_id}/groups")
+    async def api_set_sender_groups(sender_id: str, body: dict[str, Any]):
+        manager.set_sender_groups(sender_id, body.get("group_ids", []))
         return {"ok": True}
 
     # ── History ────────────────────────────────────────────────

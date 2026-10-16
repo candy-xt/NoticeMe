@@ -4,11 +4,13 @@
 
 ## 特性
 
-- **通知源**: Webhook (HTTP API) 或 MQTT 订阅
+- **通知源**: Webhook (HTTP API) 或 MQTT 订阅，仅作为消息入口
+- **通知组**: 一组通知渠道
+- **默认通知组**: 可在已有通知组中指定一个作为默认；通知者未绑定任何组时推送到它（不可删除）
+- **通知者**: 从历史记录自动发现，绑定通知组决定推送去向
 - **通知渠道**: MQTT 发布 或 API 请求转发
 - **实时通知**: 持久化显示，ID 标识，WebSocket 实时推送，可编辑更新
 - **普通通知**: 一次性推送，fire-and-forget
-- **源→渠道映射**: 每个通知源可配置多个输出渠道
 - **历史记录**: 完整记录创建/更新/推送/清除操作
 - **MCP 服务器**: stdio (编辑器/Agent 集成) + streamable-http (共用 API 端口)
 - **CLI 工具**: `nme` 命令行管理源、渠道、通知
@@ -59,12 +61,18 @@ nme mcp                    # 在 stdio 上运行 MCP 服务器
 # 初始化
 nme init                   # 初始化数据库
 
-# 通知源
+# 通知源 (仅作为消息入口，不参与渠道路由)
 nme source list            # 列出所有通知源
 nme source add -n "监控" -t webhook
 nme source add -n "IoT" -t mqtt --broker 192.168.1.100 --topic "devices/#"
 nme source remove <id>
-nme source map <source_id> <channel_id1> <channel_id2>
+
+# 通知组 (打包渠道)
+nme group list             # 列出所有通知组
+nme group add -n "服务器告警" -d "服务器相关"
+nme group map <group_id> <channel_id1> <channel_id2>
+nme group default <group_id>    # 把已有的某个通知组设为默认（通知者未绑组时的去向）
+nme group remove <id>           # 删除通知组（默认组不可删除）
 
 # 通知渠道
 nme channel list           # 列出所有渠道
@@ -72,8 +80,15 @@ nme channel add -n "飞书" -t api --url "https://open.feishu.cn/..."
 nme channel add -n "MQTT转发" -t mqtt --broker localhost --topic "out"
 nme channel remove <id>
 
+# 通知者 (从历史记录自动发现，绑定通知组)
+nme notifier list                              # 列出通知者及其通知组
+nme notifier map <sender_id> <group_id1> <group_id2>
+
 # 推送通知
 nme notify --title "部署完成" --content "v2.1.0 已上线" --level success
+nme notify --group <group_id> --title "告警"          # 直接指定通知组
+nme notify --channel <channel_id> --title "告警"      # 直接指定渠道
+nme notify --sender <sender_id> --title "告警"        # 用通知者绑定的通知组
 nme notify --id cpu-alert --title "CPU" --content "使用率 92%" --level warning
 
 # 实时通知
@@ -122,8 +137,10 @@ nme mcp
 | `list_channels` | 列出通知渠道 |
 | `create_channel` | 创建渠道 |
 | `delete_channel` | 删除渠道 |
-| `get_source_channels` | 获取源的渠道映射 |
-| `set_source_channels` | 设置源的渠道映射 |
+| `list_notifiers` | 列出通知者及其通知组映射 |
+| `set_notifier_groups` | 设置通知者绑定的通知组 |
+| `list_groups` | 列出通知组及默认组 |
+| `set_default_group` | 设置默认通知组 |
 | `list_realtime_notifications` | 列出实时通知 |
 | `push_realtime_notification` | 推送实时通知 |
 | `update_realtime_notification` | 更新实时通知 |
@@ -141,8 +158,19 @@ POST   /api/sources              # 创建
 GET    /api/sources/{id}         # 详情
 PUT    /api/sources/{id}         # 编辑
 DELETE /api/sources/{id}         # 删除
-GET    /api/sources/{id}/channels   # 获取映射
-PUT    /api/sources/{id}/channels   # 设置映射
+```
+
+### 通知组
+
+```
+GET    /api/groups               # 列表
+POST   /api/groups               # 创建
+GET    /api/groups/{id}          # 详情
+PUT    /api/groups/{id}          # 编辑
+DELETE /api/groups/{id}          # 删除
+GET    /api/groups/{id}/channels # 获取组的渠道
+PUT    /api/groups/{id}/channels # 设置组的渠道
+PUT    /api/groups/{id}/default  # 设为默认通知组
 ```
 
 ### 通知渠道
@@ -153,6 +181,14 @@ POST   /api/channels             # 创建
 GET    /api/channels/{id}        # 详情
 PUT    /api/channels/{id}        # 编辑
 DELETE /api/channels/{id}        # 删除
+```
+
+### 通知者 (通知组路由)
+
+```
+GET    /api/notifiers                      # 列表 (含绑定的通知组)
+GET    /api/notifiers/{sender_id}/groups   # 获取绑定
+PUT    /api/notifiers/{sender_id}/groups   # 设置绑定
 ```
 
 ### 通知推送

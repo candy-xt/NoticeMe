@@ -111,19 +111,8 @@ class GroupUpdate(BaseModel):
 class GroupInfo(GroupBase):
     id: str
     channel_ids: list[str] = Field(default_factory=list)
+    is_default: bool = False  # 默认组：通知者未绑定任何组时的默认去向
     created_at: str
-
-
-# ── Source ↔ Group Mapping ────────────────────────────────────────────
-
-class SourceGroupMapping(BaseModel):
-    source_id: str
-    group_id: str
-
-
-class GroupChannelMapping(BaseModel):
-    group_id: str
-    channel_ids: list[str]
 
 
 # ── Notifications ───────────────────────────────────────────────────────
@@ -180,7 +169,7 @@ class HistoryEntry(BaseModel):
 class NotifierInfo(BaseModel):
     sender_id: str
     status: str  # "green" | "yellow" | "gray"
-    channel_ids: list[str] = Field(default_factory=list)
+    group_ids: list[str] = Field(default_factory=list)
     last_title: str = ""
     last_content: str = ""
     last_time: str = ""

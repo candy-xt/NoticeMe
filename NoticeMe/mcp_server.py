@@ -71,24 +71,36 @@ TOOLS: list[types.Tool] = [
         },
     ),
     types.Tool(
-        name="get_source_channels",
-        description="Get channel IDs mapped to a source",
-        inputSchema={
-            "type": "object",
-            "properties": {"source_id": {"type": "string"}},
-            "required": ["source_id"],
-        },
+        name="list_notifiers",
+        description="List all notifiers (discovered from notification history) and their group mappings",
+        inputSchema={"type": "object", "properties": {}, "required": []},
     ),
     types.Tool(
-        name="set_source_channels",
-        description="Map channels to a source (replaces existing mapping)",
+        name="set_notifier_groups",
+        description="Map groups to a notifier (replaces existing mapping). Notifications pushed with this sender_id are routed to these groups' channels, or to the default group when empty.",
         inputSchema={
             "type": "object",
             "properties": {
-                "source_id": {"type": "string"},
-                "group_ids": {"type": "array", "items": {"type": "string"}},
+                "sender_id": {"type": "string", "description": "Notifier ID"},
+                "group_ids": {"type": "array", "items": {"type": "string"}, "description": "Group IDs to route to"},
             },
-            "required": ["source_id", "group_ids"],
+            "required": ["sender_id", "group_ids"],
+        },
+    ),
+    types.Tool(
+        name="list_groups",
+        description="List all notification groups (channel bundles) and which one is the default",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    types.Tool(
+        name="set_default_group",
+        description="Mark an existing group as the default destination (used when a notifier has no groups bound)",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "group_id": {"type": "string", "description": "Group ID to use as default"},
+            },
+            "required": ["group_id"],
         },
     ),
     types.Tool(
@@ -106,8 +118,10 @@ TOOLS: list[types.Tool] = [
                 "title": {"type": "string"},
                 "content": {"type": "string", "default": ""},
                 "level": {"type": "string", "enum": ["info", "success", "warning", "error"], "default": "info"},
-                "source_id": {"type": "string", "description": "Optional source ID for channel routing"},
-                "group_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to specific group IDs"},
+                "source_id": {"type": "string", "description": "Optional source ID (recorded as origin)"},
+                "group_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to these group IDs (overrides sender_id routing)"},
+                "channel_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to these channel IDs directly (overrides sender_id routing)"},
+                "sender_id": {"type": "string", "description": "Notifier ID whose configured groups are used"},
                 "extra": {"type": "object", "description": "Extra metadata"},
             },
             "required": ["id", "title"],
@@ -146,8 +160,10 @@ TOOLS: list[types.Tool] = [
                 "title": {"type": "string"},
                 "content": {"type": "string", "default": ""},
                 "level": {"type": "string", "enum": ["info", "success", "warning", "error"], "default": "info"},
-                "source_id": {"type": "string", "description": "Optional source ID for channel routing"},
-                "group_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to specific group IDs"},
+                "source_id": {"type": "string", "description": "Optional source ID (recorded as origin)"},
+                "group_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to these group IDs (overrides sender_id routing)"},
+                "channel_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to these channel IDs directly (overrides sender_id routing)"},
+                "sender_id": {"type": "string", "description": "Notifier ID whose configured groups are used"},
             },
             "required": ["title"],
         },
@@ -212,11 +228,15 @@ async def _dispatch(name: str, args: dict[str, Any]) -> Any:
     if name == "delete_channel":
         return {"ok": db.delete_channel(args["channel_id"])}
 
-    if name == "get_source_channels":
-        return db.get_source_channels(args["source_id"])
-    if name == "set_source_channels":
-        db.set_source_channels(args["source_id"], args["channel_ids"])
+    if name == "list_notifiers":
+        return [n.model_dump() for n in db.list_notifiers()]
+    if name == "set_notifier_groups":
+        db.set_sender_groups(args["sender_id"], args["group_ids"])
         return {"ok": True}
+    if name == "list_groups":
+        return [g.model_dump() for g in db.list_groups()]
+    if name == "set_default_group":
+        return {"ok": db.set_default_group(args["group_id"])}
 
     if name == "list_realtime_notifications":
         return [n.model_dump() for n in db.list_realtime()]
@@ -227,7 +247,8 @@ async def _dispatch(name: str, args: dict[str, Any]) -> Any:
                 notification_id=args["id"], title=args["title"],
                 content=args.get("content", ""), level=args.get("level", "info"),
                 source_id=args.get("source_id"), extra=args.get("extra"),
-                group_ids=args.get("group_ids"),
+                group_ids=args.get("group_ids"), channel_ids=args.get("channel_ids"),
+                sender=args.get("sender_id", ""),
             )
             return notif.model_dump()
         finally:
@@ -254,7 +275,8 @@ async def _dispatch(name: str, args: dict[str, Any]) -> Any:
             results = await mgr.push_regular(
                 title=args["title"], content=args.get("content", ""),
                 level=args.get("level", "info"), source_id=args.get("source_id"),
-                group_ids=args.get("group_ids"),
+                group_ids=args.get("group_ids"), channel_ids=args.get("channel_ids"),
+                sender=args.get("sender_id", ""),
             )
             return [r.model_dump() for r in results]
         finally:
