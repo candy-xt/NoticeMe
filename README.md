@@ -7,11 +7,11 @@
 - **通知源**: Webhook (HTTP API) 或 MQTT 订阅，仅作为消息入口
 - **通知组**: 一组通知渠道
 - **默认通知组**: 可在已有通知组中指定一个作为默认；通知者未绑定任何组时推送到它（不可删除）
-- **通知者**: 从历史记录自动发现，绑定通知组决定推送去向
+- **通知者**: 从历史记录 / 已绑定的通知组自动发现；两者都不存在时自动消失
 - **通知渠道**: MQTT 发布 或 API 请求转发
 - **实时通知**: 持久化显示，ID 标识，WebSocket 实时推送，可编辑更新
 - **普通通知**: 一次性推送，fire-and-forget
-- **历史记录**: 完整记录创建/更新/推送/清除操作
+- **历史记录**: 按日期分组的时间线，支持关键词/动作/通知者筛选、多选批量删除
 - **MCP 服务器**: stdio (编辑器/Agent 集成) + streamable-http (共用 API 端口)
 - **CLI 工具**: `nme` 命令行管理源、渠道、通知
 - **Web UI**: 深色主题 SPA，手机自适应
@@ -85,11 +85,11 @@ nme notifier list                              # 列出通知者及其通知组
 nme notifier map <sender_id> <group_id1> <group_id2>
 
 # 推送通知
-nme notify --title "部署完成" --content "v2.1.0 已上线" --level success
+nme notify --title "部署完成" --content "v2.1.0 已上线"
 nme notify --group <group_id> --title "告警"          # 直接指定通知组
 nme notify --channel <channel_id> --title "告警"      # 直接指定渠道
 nme notify --sender <sender_id> --title "告警"        # 用通知者绑定的通知组
-nme notify --id cpu-alert --title "CPU" --content "使用率 92%" --level warning
+nme notify --id cpu-alert --title "CPU" --content "使用率 92%"
 
 # 实时通知
 nme realtime list          # 列出活跃实时通知
@@ -197,12 +197,12 @@ PUT    /api/notifiers/{sender_id}/groups   # 设置绑定
 # 实时通知 (带 ID，持久化)
 curl -X POST http://localhost:8200/api/notifications/realtime \
   -H "Content-Type: application/json" \
-  -d '{"id": "cpu", "title": "CPU 使用率", "content": "92%", "level": "warning"}'
+  -d '{"id": "cpu", "title": "CPU 使用率", "content": "92%"}'
 
 # 更新实时通知
 curl -X PUT http://localhost:8200/api/notifications/realtime/cpu \
   -H "Content-Type: application/json" \
-  -d '{"content": "45%", "level": "success"}'
+  -d '{"content": "45%"}'
 
 # 普通通知
 curl -X POST http://localhost:8200/api/notifications/push \
@@ -212,7 +212,7 @@ curl -X POST http://localhost:8200/api/notifications/push \
 # Webhook 入口
 curl -X POST http://localhost:8200/hook/<source_id> \
   -H "Content-Type: application/json" \
-  -d '{"id": "disk", "title": "磁盘不足", "level": "error"}'
+  -d '{"id": "disk", "title": "磁盘不足"}'
 ```
 
 ### 实时通知管理
@@ -228,7 +228,9 @@ DELETE /api/notifications/realtime        # 清空全部
 ### 历史记录
 
 ```
-GET /api/history                       # 最近记录
+GET /api/history                       # 最近记录，支持 ?q=&action=&sender=&source_id=&limit=&offset=
+DELETE /api/history                    # 批量删除，body: {"ids": [1,2,3]}
+DELETE /api/history/{entry_id}         # 删除单条
 GET /api/history/{notification_id}     # 指定通知的历史
 ```
 

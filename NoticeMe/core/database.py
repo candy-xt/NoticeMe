@@ -68,7 +68,6 @@ CREATE TABLE IF NOT EXISTS realtime_notifications (
     id         TEXT PRIMARY KEY,
     title      TEXT NOT NULL,
     content    TEXT NOT NULL,
-    level      TEXT DEFAULT 'info',
     source_id  TEXT,
     extra      TEXT DEFAULT '{}',
     updated_at TEXT DEFAULT (datetime('now')),
@@ -81,7 +80,6 @@ CREATE TABLE IF NOT EXISTS history (
     action          TEXT NOT NULL,
     title           TEXT NOT NULL,
     content         TEXT NOT NULL,
-    level           TEXT DEFAULT 'info',
     source_id       TEXT,
     sender          TEXT DEFAULT '',
     extra           TEXT DEFAULT '{}',
@@ -145,6 +143,24 @@ def _migrate(conn: sqlite3.Connection) -> None:
     try:
         for table in ("source_groups", "sender_channels"):
             conn.execute(f"DROP TABLE IF EXISTS {table}")
+        conn.commit()
+    except Exception:
+        pass
+
+    # Notification "level" was removed; drop the columns on existing databases.
+    for table in ("realtime_notifications", "history"):
+        try:
+            cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            if "level" in cols:
+                conn.execute(f"ALTER TABLE {table} DROP COLUMN level")
+                conn.commit()
+        except Exception:
+            pass
+
+    # Notifiers are derived from history + group bindings only, so the
+    # bookkeeping table added in 0.3.0 is no longer used.
+    try:
+        conn.execute("DROP TABLE IF EXISTS notifiers")
         conn.commit()
     except Exception:
         pass
@@ -487,7 +503,6 @@ def _row_to_realtime(row: sqlite3.Row) -> RealtimeNotification:
         id=row["id"],
         title=row["title"],
         content=row["content"],
-        level=row["level"],
         source_id=row["source_id"],
         extra=json.loads(row["extra"]),
         updated_at=row["updated_at"],
@@ -521,7 +536,6 @@ def upsert_realtime(
     notification_id: str,
     title: str,
     content: str,
-    level: str = "info",
     source_id: Optional[str] = None,
     extra: Optional[dict[str, Any]] = None,
 ) -> RealtimeNotification:
@@ -535,13 +549,13 @@ def upsert_realtime(
         ).fetchone()
         if existing:
             conn.execute(
-                "UPDATE realtime_notifications SET title=?, content=?, level=?, source_id=?, extra=?, updated_at=? WHERE id=?",
-                (title, content, level, source_id, extra_json, now, notification_id),
+                "UPDATE realtime_notifications SET title=?, content=?, source_id=?, extra=?, updated_at=? WHERE id=?",
+                (title, content, source_id, extra_json, now, notification_id),
             )
         else:
             conn.execute(
-                "INSERT INTO realtime_notifications (id, title, content, level, source_id, extra, updated_at, created_at) VALUES (?,?,?,?,?,?,?,?)",
-                (notification_id, title, content, level, source_id, extra_json, now, now),
+                "INSERT INTO realtime_notifications (id, title, content, source_id, extra, updated_at, created_at) VALUES (?,?,?,?,?,?,?)",
+                (notification_id, title, content, source_id, extra_json, now, now),
             )
         conn.commit()
         return get_realtime(notification_id)  # type: ignore
@@ -580,7 +594,6 @@ def _row_to_history(row: sqlite3.Row) -> HistoryEntry:
         action=row["action"],
         title=row["title"],
         content=row["content"],
-        level=row["level"],
         source_id=row["source_id"],
         sender=row["sender"] if "sender" in row.keys() else "",
         extra=json.loads(row["extra"]),
@@ -592,7 +605,6 @@ def add_history(
     action: str,
     title: str,
     content: str,
-    level: str = "info",
     notification_id: Optional[str] = None,
     source_id: Optional[str] = None,
     sender: str = "",
@@ -601,21 +613,109 @@ def add_history(
     conn = _get_conn()
     try:
         conn.execute(
-            "INSERT INTO history (notification_id, action, title, content, level, source_id, sender, extra) VALUES (?,?,?,?,?,?,?,?)",
-            (notification_id, action, title, content, level, source_id, sender, json.dumps(extra or {})),
+            "INSERT INTO history (notification_id, action, title, content, source_id, sender, extra) VALUES (?,?,?,?,?,?,?)",
+            (notification_id, action, title, content, source_id, sender, json.dumps(extra or {})),
         )
         conn.commit()
     finally:
         conn.close()
 
 
-def list_history(limit: int = 100, offset: int = 0) -> list[HistoryEntry]:
+def list_history(
+    limit: int = 100,
+    offset: int = 0,
+    action: Optional[str] = None,
+    source_id: Optional[str] = None,
+    sender: Optional[str] = None,
+    query: Optional[str] = None,
+) -> list[HistoryEntry]:
+    """List history entries, newest first, with optional filters."""
+    where: list[str] = []
+    values: list[Any] = []
+    if action:
+        where.append("action = ?")
+        values.append(action)
+    if source_id:
+        where.append("source_id = ?")
+        values.append(source_id)
+    if sender:
+        where.append("sender = ?")
+        values.append(sender)
+    if query:
+        like = f"%{query}%"
+        where.append("(title LIKE ? OR content LIKE ? OR sender LIKE ? OR notification_id LIKE ?)")
+        values.extend([like, like, like, like])
+
+    sql = "SELECT * FROM history"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
+    values.extend([limit, offset])
+
     conn = _get_conn()
     try:
-        rows = conn.execute(
-            "SELECT * FROM history ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset)
-        ).fetchall()
+        rows = conn.execute(sql, values).fetchall()
         return [_row_to_history(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def count_history(
+    action: Optional[str] = None,
+    source_id: Optional[str] = None,
+    sender: Optional[str] = None,
+    query: Optional[str] = None,
+) -> int:
+    """Count history entries matching the same filters as ``list_history``."""
+    where: list[str] = []
+    values: list[Any] = []
+    if action:
+        where.append("action = ?")
+        values.append(action)
+    if source_id:
+        where.append("source_id = ?")
+        values.append(source_id)
+    if sender:
+        where.append("sender = ?")
+        values.append(sender)
+    if query:
+        like = f"%{query}%"
+        where.append("(title LIKE ? OR content LIKE ? OR sender LIKE ? OR notification_id LIKE ?)")
+        values.extend([like, like, like, like])
+
+    sql = "SELECT COUNT(*) AS n FROM history"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+
+    conn = _get_conn()
+    try:
+        return int(conn.execute(sql, values).fetchone()["n"])
+    finally:
+        conn.close()
+
+
+def delete_history(ids: list[int]) -> int:
+    """Delete history entries by id. Returns the number of rows removed."""
+    ids = [int(i) for i in ids]
+    if not ids:
+        return 0
+    placeholders = ",".join("?" * len(ids))
+    conn = _get_conn()
+    try:
+        cur = conn.execute(f"DELETE FROM history WHERE id IN ({placeholders})", ids)
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
+def clear_history() -> int:
+    """Delete every history entry. Returns the number of rows removed."""
+    conn = _get_conn()
+    try:
+        cur = conn.execute("DELETE FROM history")
+        conn.commit()
+        return cur.rowcount
     finally:
         conn.close()
 
@@ -664,7 +764,8 @@ def list_notifiers() -> list[NotifierInfo]:
         sg_rows = conn.execute("SELECT DISTINCT sender_id FROM sender_groups").fetchall()
         configured_senders = {r["sender_id"] for r in sg_rows}
 
-        # Build notifier list
+        # A notifier exists only while it has history or a group binding.
+        # Once both are gone it disappears instead of lingering as a gray card.
         notifiers: list[NotifierInfo] = []
         for sender_id in sorted(all_senders | configured_senders):
             group_ids = get_sender_groups(sender_id)

@@ -168,7 +168,7 @@ def channel_list():
 @click.option("--url", help="API endpoint URL")
 @click.option("--method", default="POST", help="HTTP method")
 @click.option("--headers", help="HTTP headers as JSON string")
-@click.option("--body-template", help="Body template with {{title}}, {{content}}, {{level}} vars")
+@click.option("--body-template", help="Body template with {{title}}, {{content}} vars")
 @click.option("--disabled", is_flag=True, help="Create in disabled state")
 def channel_add(name: str, ctype: str, broker: str | None, mqtt_port: int,
                 topic: str | None, username: str | None, password: str | None,
@@ -354,13 +354,12 @@ def notifier_map(sender_id: str, group_ids: tuple[str, ...]):
 @click.option("--id", "notif_id", help="Notification ID (for real-time)")
 @click.option("--title", "-t", required=True, help="Notification title")
 @click.option("--content", "-c", default="", help="Notification content")
-@click.option("--level", "-l", default="info", type=click.Choice(["info", "success", "warning", "error"]))
 @click.option("--source", "-s", help="Source ID (recorded as notification origin)")
 @click.option("--group", "-g", multiple=True, help="Group ID(s) to push to (can repeat, overrides --sender)")
 @click.option("--channel", "-ch", multiple=True, help="Channel ID(s) to push to directly (can repeat, overrides --sender)")
 @click.option("--sender", help="Notifier ID whose configured groups are used")
 @click.option("--extra", help="Extra data as JSON string")
-def notify(notif_id: str | None, title: str, content: str, level: str,
+def notify(notif_id: str | None, title: str, content: str,
            source: str | None, group: tuple[str, ...], channel: tuple[str, ...],
            sender: str | None, extra: str | None):
     """Push a notification (real-time if --id given, regular otherwise)."""
@@ -383,11 +382,11 @@ def notify(notif_id: str | None, title: str, content: str, level: str,
         ch_ids = list(channel) if channel else None
         try:
             if notif_id:
-                notif = await mgr.push_realtime(notif_id, title, content, level, source, extra_data,
+                notif = await mgr.push_realtime(notif_id, title, content, source, extra_data,
                                                 group_ids=grp_ids, channel_ids=ch_ids, sender=sender or "")
                 click.echo(f"Pushed real-time notification: {notif.id}")
             else:
-                results = await mgr.push_regular(title, content, level, source, extra_data,
+                results = await mgr.push_regular(title, content, source, extra_data,
                                                   group_ids=grp_ids, channel_ids=ch_ids, sender=sender or "")
                 if not results:
                     click.echo("Pushed notification (no channels to route to)")
@@ -422,8 +421,7 @@ def realtime_list():
         click.echo("No active real-time notifications.")
         return
     for n in notifs:
-        level_tag = {"info": "ℹ", "success": "✓", "warning": "⚠", "error": "✗"}.get(n.level, "?")
-        click.echo(f"  {level_tag} [{n.id}] {n.title}")
+        click.echo(f"  • [{n.id}] {n.title}")
         if n.content:
             preview = n.content[:80] + ("…" if len(n.content) > 80 else "")
             click.echo(f"    {preview}")
@@ -464,9 +462,8 @@ def history(limit: int, notification: str | None):
         click.echo("No history entries.")
         return
     for e in entries:
-        level_tag = {"info": "ℹ", "success": "✓", "warning": "⚠", "error": "✗"}.get(e.level, "?")
         nid = f" #{e.notification_id}" if e.notification_id else ""
-        click.echo(f"  {level_tag} [{e.action}]{nid} {e.title}  ({e.created_at})")
+        click.echo(f"  • [{e.action}]{nid} {e.title}  ({e.created_at})")
         if e.content:
             preview = e.content[:80] + ("…" if len(e.content) > 80 else "")
             click.echo(f"    {preview}")

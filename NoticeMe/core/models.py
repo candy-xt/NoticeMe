@@ -121,7 +121,6 @@ class RealtimeNotification(BaseModel):
     id: str
     title: str
     content: str
-    level: str = "info"  # info / warning / error / success
     source_id: Optional[str] = None
     extra: dict[str, Any] = Field(default_factory=dict)
     updated_at: str
@@ -131,14 +130,12 @@ class RealtimeNotification(BaseModel):
 class RealtimeUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
-    level: Optional[str] = None
     extra: Optional[dict[str, Any]] = None
 
 
 class RegularNotification(BaseModel):
     title: str
     content: str
-    level: str = "info"
     source_id: Optional[str] = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
@@ -157,7 +154,6 @@ class HistoryEntry(BaseModel):
     action: str
     title: str
     content: str
-    level: str
     source_id: Optional[str] = None
     sender: str = ""
     extra: dict[str, Any] = Field(default_factory=dict)
@@ -182,6 +178,5 @@ class WSEvent(BaseModel):
     notification_id: Optional[str] = None
     title: Optional[str] = None
     content: Optional[str] = None
-    level: Optional[str] = None
     extra: Optional[dict[str, Any]] = None
     timestamp: Optional[str] = None

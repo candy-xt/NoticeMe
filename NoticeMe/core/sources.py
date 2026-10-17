@@ -12,7 +12,11 @@ from .models import SourceInfo, SourceType
 logger = logging.getLogger("noticeme.sources")
 
 
-def apply_template(source: SourceInfo, raw_payload: Any) -> dict[str, Any]:
+def apply_template(
+    source: SourceInfo,
+    raw_payload: Any,
+    topic: Optional[str] = None,
+) -> dict[str, Any]:
     """Apply source template to extract notification fields from raw payload.
 
     Template config (source.config.template):
@@ -21,11 +25,49 @@ def apply_template(source: SourceInfo, raw_payload: Any) -> dict[str, Any]:
     - content_field: key name for content
     - id_field: key name for notification ID (presence → realtime)
     - sender_field: key name for sender_id
-    - level_field: key name for level
     - default_title: fallback title
 
-    Returns a normalized dict with: title, content, level, id (optional), extra.sender_id
+    Sender fallback (source.config.sender_from_topic):
+    - "off" (default): only the payload provides the sender
+    - "topic": use the MQTT topic as the sender
+    - "last": use the last topic segment (e.g. ``noticeme/NodeRED`` → ``NodeRED``)
+
+    Returns a normalized dict with: title, content, id (optional), extra.sender_id
     """
+    result = _apply_template(source, raw_payload)
+    return _apply_topic_sender(source, result, topic)
+
+
+def _apply_topic_sender(
+    source: SourceInfo, result: dict[str, Any], topic: Optional[str]
+) -> dict[str, Any]:
+    """Fill in the sender from the MQTT topic when the payload has none."""
+    if not topic:
+        return result
+    if result.get("sender") or result.get("sender_id"):
+        return result
+    if (result.get("extra") or {}).get("sender_id"):
+        return result
+
+    mode = source.config.get("sender_from_topic", "off")
+    if mode == "topic":
+        sender = topic
+    elif mode == "last":
+        sender = topic.rstrip("/").rsplit("/", 1)[-1]
+    else:
+        return result
+
+    sender = str(sender).strip()
+    if not sender:
+        return result
+
+    result = dict(result)
+    result["extra"] = {**(result.get("extra") or {}), "sender_id": sender}
+    return result
+
+
+def _apply_template(source: SourceInfo, raw_payload: Any) -> dict[str, Any]:
+    """Normalize a payload using the source template (without topic fallback)."""
     template = source.config.get("template")
     if not template:
         # No template — return payload as-is (legacy behavior)
@@ -38,15 +80,31 @@ def apply_template(source: SourceInfo, raw_payload: Any) -> dict[str, Any]:
 
     if mode == "text":
         # Text mode: raw text → content, default title, no realtime
-        text = str(raw_payload) if not isinstance(raw_payload, str) else raw_payload
         sender = ""
-        sender_field = template.get("sender_field", "sender")
-        if isinstance(raw_payload, dict) and sender_field:
-            sender = str(raw_payload.get(sender_field, ""))
+        sender_field = template.get("sender_field") or "sender"
+        fields: dict[str, Any] = {}
+        if isinstance(raw_payload, dict):
+            fields = raw_payload
+            # MQTT wraps non-JSON payloads as {"raw": "<text>"}; unwrap it so the
+            # content is the actual text rather than the wrapper's repr.
+            if set(raw_payload.keys()) == {"raw"}:
+                text = str(raw_payload["raw"])
+            else:
+                text = str(raw_payload)
+        else:
+            text = str(raw_payload)
+
+        if fields:
+            sender = str(
+                fields.get(sender_field)
+                or fields.get("sender")
+                or fields.get("sender_id")
+                or ""
+            )
+
         result: dict[str, Any] = {
             "title": default_title,
             "content": text,
-            "level": "info",
         }
         if sender:
             result["extra"] = {"sender_id": sender}
@@ -59,20 +117,17 @@ def apply_template(source: SourceInfo, raw_payload: Any) -> dict[str, Any]:
             try:
                 raw_payload = json.loads(raw_payload)
             except (json.JSONDecodeError, ValueError):
-                return {"title": default_title, "content": raw_payload, "level": "info"}
+                return {"title": default_title, "content": raw_payload}
         else:
-            return {"title": default_title, "content": str(raw_payload), "level": "info"}
+            return {"title": default_title, "content": str(raw_payload)}
 
     title_field = template.get("title_field", "title")
     content_field = template.get("content_field", "content")
     id_field = template.get("id_field", "id")
     sender_field = template.get("sender_field", "sender")
-    level_field = template.get("level_field", "level")
-
     result = {
         "title": str(raw_payload.get(title_field, default_title)),
         "content": str(raw_payload.get(content_field, "")),
-        "level": str(raw_payload.get(level_field, "info")),
     }
 
     # Notification ID — presence means realtime
@@ -80,9 +135,13 @@ def apply_template(source: SourceInfo, raw_payload: Any) -> dict[str, Any]:
     if nid is not None:
         result["id"] = str(nid)
 
-    # Sender ID
-    sender = raw_payload.get(sender_field)
-    if sender is not None:
+    # Sender ID — configured field first, then the common names
+    sender = (
+        raw_payload.get(sender_field)
+        or raw_payload.get("sender")
+        or raw_payload.get("sender_id")
+    )
+    if sender is not None and str(sender) != "":
         result["extra"] = {"sender_id": str(sender)}
 
     return result
@@ -162,12 +221,16 @@ class SourceManager:
                     await client.subscribe(topic)
                     logger.info("MQTT source %s connected to %s:%d topic=%s", source.id, broker, port, topic)
                     async for message in client.messages:
+                        topic = str(message.topic)
                         try:
                             raw = json.loads(message.payload.decode())
                         except (json.JSONDecodeError, UnicodeDecodeError):
-                            raw = {"raw": str(message.payload)}
-                        # Apply template to normalize payload
-                        normalized = apply_template(source, raw)
+                            raw = {"raw": message.payload.decode(errors="replace")}
+                        # Apply template to normalize payload (topic is used as a
+                        # last-resort sender when configured).
+                        normalized = apply_template(source, raw, topic=topic)
+                        logger.debug("MQTT %s topic=%s sender=%r",
+                                     source.id, topic, (normalized.get("extra") or {}).get("sender_id"))
                         if self.on_receive:
                             self.on_receive(source.id, normalized)
             except asyncio.CancelledError:

@@ -135,7 +135,6 @@ class NoticeManager:
         notification_id: str,
         title: str,
         content: str,
-        level: str = "info",
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
         group_ids: Optional[list[str]] = None,
@@ -146,14 +145,13 @@ class NoticeManager:
         existing = db.get_realtime(notification_id)
         action = "updated" if existing else "created"
 
-        notif = db.upsert_realtime(notification_id, title, content, level, source_id, extra)
+        notif = db.upsert_realtime(notification_id, title, content, source_id, extra)
 
         # Record history
         db.add_history(
             action=action,
             title=title,
             content=content,
-            level=level,
             notification_id=notification_id,
             source_id=source_id,
             sender=sender,
@@ -166,13 +164,12 @@ class NoticeManager:
             notification_id=notification_id,
             title=title,
             content=content,
-            level=level,
             extra=extra,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
         self._broadcast_ws(event)
 
-        await self._route(title, content, level, extra, group_ids, channel_ids, sender)
+        await self._route(title, content, extra, group_ids, channel_ids, sender)
 
         return notif
 
@@ -186,18 +183,16 @@ class NoticeManager:
 
         title = data.title if data.title is not None else existing.title
         content = data.content if data.content is not None else existing.content
-        level = data.level if data.level is not None else existing.level
         extra = data.extra if data.extra is not None else existing.extra
 
         notif = db.upsert_realtime(
-            notification_id, title, content, level, existing.source_id, extra
+            notification_id, title, content, existing.source_id, extra
         )
 
         db.add_history(
             action="updated",
             title=title,
             content=content,
-            level=level,
             notification_id=notification_id,
             source_id=existing.source_id,
             extra=extra,
@@ -208,7 +203,6 @@ class NoticeManager:
             notification_id=notification_id,
             title=title,
             content=content,
-            level=level,
             extra=extra,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
@@ -228,7 +222,6 @@ class NoticeManager:
             action="cleared",
             title=existing.title,
             content=existing.content,
-            level=existing.level,
             notification_id=notification_id,
             source_id=existing.source_id,
         )
@@ -244,7 +237,7 @@ class NoticeManager:
     async def clear_all_realtime(self) -> int:
         """Remove all real-time notifications."""
         count = db.clear_realtime()
-        db.add_history(action="cleared", title=f"Cleared {count} notifications", content="", level="info")
+        db.add_history(action="cleared", title=f"Cleared {count} notifications", content="")
         event = WSEvent(type="realtime_clear", notification_id="*", timestamp=datetime.now(timezone.utc).isoformat())
         self._broadcast_ws(event)
         return count
@@ -259,7 +252,6 @@ class NoticeManager:
         self,
         title: str,
         content: str,
-        level: str = "info",
         source_id: Optional[str] = None,
         extra: Optional[dict[str, Any]] = None,
         group_ids: Optional[list[str]] = None,
@@ -272,7 +264,6 @@ class NoticeManager:
             action="pushed",
             title=title,
             content=content,
-            level=level,
             source_id=source_id,
             sender=sender,
             extra=extra,
@@ -283,16 +274,38 @@ class NoticeManager:
             type="notification",
             title=title,
             content=content,
-            level=level,
             extra=extra,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
         self._broadcast_ws(event)
 
-        return await self._route(title, content, level, extra, group_ids, channel_ids, sender)
+        return await self._route(title, content, extra, group_ids, channel_ids, sender)
 
-    def list_history(self, limit: int = 100, offset: int = 0) -> list[HistoryEntry]:
-        return db.list_history(limit, offset)
+    def list_history(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        action: Optional[str] = None,
+        source_id: Optional[str] = None,
+        sender: Optional[str] = None,
+        query: Optional[str] = None,
+    ) -> list[HistoryEntry]:
+        return db.list_history(limit, offset, action, source_id, sender, query)
+
+    def count_history(
+        self,
+        action: Optional[str] = None,
+        source_id: Optional[str] = None,
+        sender: Optional[str] = None,
+        query: Optional[str] = None,
+    ) -> int:
+        return db.count_history(action, source_id, sender, query)
+
+    def delete_history(self, ids: list[int]) -> int:
+        return db.delete_history(ids)
+
+    def clear_history(self) -> int:
+        return db.clear_history()
 
     def get_notification_history(self, notification_id: str) -> list[HistoryEntry]:
         return db.get_history_for_notification(notification_id)
@@ -339,27 +352,35 @@ class NoticeManager:
         """Callback when a source receives data. Schedules routing."""
         title = payload.get("title", "Notification")
         content = payload.get("content", json.dumps(payload, ensure_ascii=False))
-        level = payload.get("level", "info")
         notification_id = payload.get("id")
-        extra = payload.get("extra", {})
-        sender = extra.get("sender_id", "")
+        extra = payload.get("extra") or {}
+        # Sender may arrive at the top level (typical for MQTT JSON payloads) or
+        # inside extra.sender_id (set by the template parser).
+        sender = (
+            payload.get("sender")
+            or payload.get("sender_id")
+            or extra.get("sender_id")
+            or extra.get("sender")
+            or ""
+        )
+        sender = str(sender).strip()[:100]
+        logger.info("source %s received: sender=%r title=%r", source_id, sender, title)
 
         if notification_id:
             # Real-time notification
             asyncio.create_task(
-                self.push_realtime(notification_id, title, content, level, source_id, extra, sender=sender)
+                self.push_realtime(notification_id, title, content, source_id, extra, sender=sender)
             )
         else:
             # Regular notification
             asyncio.create_task(
-                self.push_regular(title, content, level, source_id, extra, sender=sender)
+                self.push_regular(title, content, source_id, extra, sender=sender)
             )
 
     async def _route(
         self,
         title: str,
         content: str,
-        level: str,
         extra: Optional[dict[str, Any]],
         group_ids: Optional[list[str]],
         channel_ids: Optional[list[str]],
@@ -397,14 +418,13 @@ class NoticeManager:
 
         if not unique:
             return []
-        return await self._push_to_channels(unique, title, content, level, extra)
+        return await self._push_to_channels(unique, title, content, extra)
 
     async def _push_to_channels(
         self,
         channel_ids: list[str],
         title: str,
         content: str,
-        level: str,
         extra: Optional[dict[str, Any]],
     ) -> list[PushResult]:
         """Push a notification to specific channels by ID."""
@@ -412,7 +432,7 @@ class NoticeManager:
         for cid in channel_ids:
             ch = db.get_channel(cid)
             if ch and ch.enabled:
-                result = await self.channel_mgr.push(ch, title, content, level, extra)
+                result = await self.channel_mgr.push(ch, title, content, extra)
                 results.append(result)
         return results
 

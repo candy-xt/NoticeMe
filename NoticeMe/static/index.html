@@ -26,6 +26,9 @@
   </script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    /* x-cloak must exist before Alpine boots, otherwise every modal and both
+       the login page and the app shell flash for a frame. */
+    [x-cloak] { display: none !important; }
     body { font-family:'Inter',system-ui,sans-serif; }
     .mono { font-family:'JetBrains Mono',monospace; }
     .card-enter { animation: slideUp .2s ease-out; }
@@ -36,14 +39,6 @@
     .scroll-thin::-webkit-scrollbar { width:6px; }
     .dark .scroll-thin::-webkit-scrollbar-track { background:#0f1117; }
     .dark .scroll-thin::-webkit-scrollbar-thumb { background:#262a3e; border-radius:3px; }
-    .level-info    { border-left-color:#6366f1; }
-    .level-warning { border-left-color:#f59e0b; }
-    .level-error   { border-left-color:#ef4444; }
-    .level-success { border-left-color:#22c55e; }
-    .badge-info    { background:#6366f120; color:#818cf8; }
-    .badge-warning { background:#f59e0b20; color:#f59e0b; }
-    .badge-error   { background:#ef444420; color:#ef4444; }
-    .badge-success { background:#22c55e20; color:#22c55e; }
     .fade-in { animation: fadeIn .3s ease-out; }
     @keyframes fadeIn { from{opacity:0} to{opacity:1} }
     .scrollbar-none { scrollbar-width:none; }
@@ -56,6 +51,15 @@
 </head>
 <body class="bg-lsurface text-gray-800 dark:bg-surface dark:text-gray-200 min-h-screen transition-colors"
       x-data="noticeMe()" x-init="init()">
+
+  <!-- Boot splash: inline styles only, so it paints before Alpine/CDN finish.
+       Removed by init(). -->
+  <div id="boot-splash" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#0f1117;">
+    <div style="text-align:center;font-family:system-ui,-apple-system,sans-serif;">
+      <div style="width:40px;height:40px;margin:0 auto 12px;border-radius:12px;background:#6366f1;color:#fff;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;">N</div>
+      <div style="color:#6b7280;font-size:12px;">正在加载…</div>
+    </div>
+  </div>
 
   <!-- ═══ Login Page ═══ -->
   <div x-show="!authenticated" x-cloak class="min-h-screen flex items-center justify-center px-4">
@@ -100,7 +104,7 @@
       <div class="flex items-center gap-2.5 px-4 h-14 flex-shrink-0 border-b border-lsurface-3 dark:border-surface-3">
         <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm flex-shrink-0">N</div>
         <span class="font-semibold text-gray-900 dark:text-white tracking-tight">NoticeMe</span>
-        <span class="text-[11px] text-gray-400 ml-auto">v0.3.0</span>
+        <span class="text-[11px] text-gray-400 ml-auto">v0.3.1</span>
       </div>
 
       <!-- Nav -->
@@ -110,7 +114,7 @@
             <p x-show="sec.label" class="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500" x-text="sec.label"></p>
             <div class="space-y-0.5">
               <template x-for="it in sec.items" :key="it.id">
-                <button @click="currentTab = it.id; navOpen = false"
+                <button @click="go(it.id)"
                   class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left"
                   :class="currentTab === it.id
                     ? 'bg-accent/15 text-accent-glow font-medium'
@@ -162,7 +166,7 @@
     <div x-show="currentTab === 'dashboard'">
       <!-- Push bar -->
       <div class="mb-6 flex flex-wrap items-center gap-2 sm:gap-3">
-        <button @click="showPush = true"
+        <button @click="openPush()"
           class="px-4 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5m0 0l-7 7m7-7l7 7"/></svg>
           推送通知
@@ -180,12 +184,10 @@
       <!-- Real-time notifications -->
       <div x-show="realtimeNotifs.length > 0" class="space-y-3">
         <template x-for="n in realtimeNotifs" :key="n.id">
-          <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl p-5 border-l-4 card-enter transition-colors"
-            :class="'level-' + n.level">
+          <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl p-5 card-enter transition-colors">
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="'badge-' + n.level" x-text="levelText(n.level)"></span>
                   <span class="text-xs text-gray-400 mono" x-text="'#' + n.id"></span>
                 </div>
                 <h3 class="font-semibold text-gray-900 dark:text-white mb-1" x-text="n.title"></h3>
@@ -331,6 +333,8 @@
           <h2 class="text-base font-semibold text-gray-900 dark:text-white">通知者</h2>
           <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">自动从通知历史中发现，在这里绑定推送的通知组</p>
         </div>
+        <button @click="refresh()"
+          class="px-4 py-2 bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors">刷新</button>
       </div>
 
       <!-- Status legend -->
@@ -423,34 +427,112 @@
 
     <!-- ═══ History Tab ═══ -->
     <div x-show="currentTab === 'history'">
-      <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-base font-semibold text-gray-900 dark:text-white">历史记录</h2>
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="text-base font-semibold text-gray-900 dark:text-white">历史记录</h2>
+          <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5" x-text="historyTotal + ' 条记录'"></p>
+        </div>
         <button @click="loadHistory()"
           class="px-4 py-2 bg-lsurface-3 dark:bg-surface-3 hover:bg-lsurface-4 dark:hover:bg-surface-4 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors">刷新</button>
       </div>
 
-      <div x-show="history.length === 0" class="text-center py-16 text-gray-400 dark:text-gray-500">
-        <p class="text-sm">暂无历史记录</p>
+      <!-- Filters -->
+      <div class="mb-4 bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl p-3">
+        <div class="flex flex-wrap items-end gap-2">
+          <div class="flex-1 min-w-[200px]">
+            <label class="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">搜索</label>
+            <input x-model="historyFilters.q" @input.debounce.400ms="$nextTick(() => loadHistory())"
+              placeholder="标题 / 内容 / 通知者 / 通知 ID"
+              class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">动作</label>
+            <select x-model="historyFilters.action" @change="$nextTick(() => loadHistory())"
+              class="bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
+              <option value="">全部</option>
+              <option value="created">创建</option>
+              <option value="updated">更新</option>
+              <option value="pushed">推送</option>
+              <option value="cleared">清除</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">通知者</label>
+            <select x-model="historyFilters.sender" @change="$nextTick(() => loadHistory())"
+              class="bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
+              <option value="">全部</option>
+              <template x-for="n in notifiers" :key="n.sender_id">
+                <option :value="n.sender_id" x-text="n.sender_id"></option>
+              </template>
+            </select>
+          </div>
+          <button @click="resetHistoryFilters()"
+            class="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-lsurface-3 dark:hover:bg-surface-3 rounded-lg transition-colors">重置</button>
+        </div>
       </div>
 
-      <div class="space-y-2">
-        <template x-for="h in history" :key="h.id">
-          <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl px-5 py-4 border-l-4 card-enter"
-            :class="'level-' + h.level">
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2 mb-1">
-                  <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="'badge-' + h.level" x-text="levelText(h.level)"></span>
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-lsurface-3 dark:bg-surface-3 text-gray-500" x-text="actionText(h.action)"></span>
-                  <span x-show="h.notification_id" class="text-xs text-gray-400 mono" x-text="'#' + h.notification_id"></span>
-                </div>
-                <h4 class="font-medium text-gray-900 dark:text-white text-sm" x-text="h.title"></h4>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2" x-text="h.content"></p>
+      <!-- Selection toolbar -->
+      <div class="mb-3 flex flex-wrap items-center gap-3 min-h-[32px]">
+        <label x-show="history.length > 0" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
+          <input type="checkbox" :checked="historyAllSelected()" @change="toggleSelectAll()"
+            class="rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent">
+          全选本页
+        </label>
+        <span x-show="selectedHistory.length > 0" class="text-xs text-gray-500 dark:text-gray-400"
+          x-text="'已选 ' + selectedHistory.length + ' 条'"></span>
+        <button x-show="selectedHistory.length > 0" @click="deleteSelectedHistory()"
+          class="px-3 py-1.5 bg-danger/15 hover:bg-danger/25 text-danger text-xs font-medium rounded-lg transition-colors">删除选中</button>
+        <span x-show="historyLoading" class="text-xs text-gray-400">加载中…</span>
+      </div>
+
+      <!-- Empty -->
+      <div x-show="!historyLoading && history.length === 0" class="text-center py-16 text-gray-400 dark:text-gray-500">
+        <p class="text-sm">暂无历史记录</p>
+        <p x-show="historyHasFilters()" class="text-xs mt-1">当前筛选条件下没有匹配记录</p>
+      </div>
+
+      <!-- Timeline -->
+      <div class="relative">
+        <div x-show="history.length > 0" class="absolute left-3 top-2 bottom-2 w-px bg-lsurface-3 dark:bg-surface-3"></div>
+        <div class="space-y-5">
+          <template x-for="grp in historyGroups" :key="grp.label">
+            <div>
+              <!-- Date marker -->
+              <div class="relative pl-10 mb-2">
+                <span class="absolute left-[5px] top-1 w-3.5 h-3.5 rounded-full bg-accent ring-4 ring-lsurface dark:ring-surface"></span>
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400" x-text="grp.label"></h3>
               </div>
-              <span class="text-xs text-gray-400 flex-shrink-0" x-text="fmtTime(h.created_at)"></span>
+              <div class="space-y-2">
+                <template x-for="h in grp.items" :key="h.id">
+                  <div class="relative pl-10">
+                    <span class="absolute left-[8px] top-5 w-2 h-2 rounded-full bg-accent"></span>
+                    <div class="bg-lsurface-2 dark:bg-surface-2 border border-lsurface-3 dark:border-surface-3 rounded-xl px-4 py-3 transition-colors"
+                      :class="selectedHistory.includes(h.id) ? 'ring-1 ring-accent/50' : ''">
+                      <div class="flex items-start gap-3">
+                        <input type="checkbox" :value="h.id" x-model="selectedHistory"
+                          class="mt-1 rounded bg-lsurface dark:bg-surface border-lsurface-3 dark:border-surface-3 text-accent focus:ring-accent flex-shrink-0">
+                        <div class="min-w-0 flex-1">
+                          <div class="flex flex-wrap items-center gap-2 mb-1">
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-lsurface-3 dark:bg-surface-3 text-gray-500" x-text="actionText(h.action)"></span>
+                            <span x-show="h.sender" class="text-xs text-gray-500 dark:text-gray-400 mono" x-text="h.sender"></span>
+                            <span x-show="h.notification_id" class="text-xs text-gray-400 mono" x-text="'#' + h.notification_id"></span>
+                            <span class="text-xs text-gray-400 ml-auto flex-shrink-0" x-text="fmtTime(h.created_at)"></span>
+                          </div>
+                          <h4 class="font-medium text-gray-900 dark:text-white text-sm" x-text="h.title"></h4>
+                          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2" x-text="h.content"></p>
+                        </div>
+                        <button @click="deleteHistoryEntry(h.id)" title="删除这条记录"
+                          class="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-danger/10 transition-colors flex-shrink-0">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
             </div>
-          </div>
-        </template>
+          </template>
+        </div>
       </div>
     </div>
       </main>
@@ -488,15 +570,6 @@
           <textarea x-model="pushForm.content" rows="3" placeholder="通知内容" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-none"></textarea>
         </div>
         <div>
-          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">级别</label>
-          <select x-model="pushForm.level" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
-            <option value="info">信息</option>
-            <option value="success">成功</option>
-            <option value="warning">警告</option>
-            <option value="error">错误</option>
-          </select>
-        </div>
-        <div>
           <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">通知者</label>
           <select x-model="pushForm.sender" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
             <option value="">默认（走默认通知组）</option>
@@ -517,6 +590,7 @@
         <button @click="showPush = false" class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">取消</button>
         <button @click="doPush()" class="px-5 py-2 bg-accent hover:bg-accent-dim text-white text-sm font-medium rounded-lg transition-colors">推送</button>
       </div>
+      <p x-show="pushError" class="text-xs text-danger mt-3" x-text="pushError"></p>
     </div>
   </div>
 
@@ -532,15 +606,6 @@
         <div>
           <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">内容</label>
           <textarea x-model="editRTForm.content" rows="3" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors resize-none"></textarea>
-        </div>
-        <div>
-          <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">级别</label>
-          <select x-model="editRTForm.level" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
-            <option value="info">信息</option>
-            <option value="success">成功</option>
-            <option value="warning">警告</option>
-            <option value="error">错误</option>
-          </select>
         </div>
       </div>
       <div class="flex justify-end gap-3 mt-6">
@@ -579,6 +644,14 @@
           <div>
             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Topic</label>
             <input x-model="sourceForm.topic" placeholder="noticeme/in" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">发送者来源 <span class="text-gray-400 dark:text-gray-600">（消息里没有 sender 字段时）</span></label>
+            <select x-model="sourceForm.senderFromTopic" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-accent transition-colors">
+              <option value="off">仅消息字段（默认）</option>
+              <option value="topic">MQTT 主题</option>
+              <option value="last">主题最后一段</option>
+            </select>
           </div>
           <div>
             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">用户名（可选）</label>
@@ -622,10 +695,6 @@
               <div>
                 <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">发送者字段名</label>
                 <input x-model="sourceForm.tplSenderField" placeholder="sender" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
-              </div>
-              <div>
-                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">级别字段名</label>
-                <input x-model="sourceForm.tplLevelField" placeholder="level" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
               </div>
             </div>
             <!-- Text mode fields -->
@@ -690,7 +759,7 @@
           <div>
             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Body 模板（可选，留空用默认 JSON）</label>
             <textarea x-model="channelForm.bodyTemplate" rows="3" placeholder='{"msg": "{{title}}: {{content}}"}' class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-none"></textarea>
-            <p class="text-xs text-gray-400 mt-1">可用变量: {{title}} {{content}} {{level}}</p>
+            <p class="text-xs text-gray-400 mt-1">可用变量: {{title}} {{content}}</p>
           </div>
         </div>
         <!-- MQTT config -->
@@ -850,10 +919,18 @@
         channels: [],
         notifiers: [],
         history: [],
+        historyTotal: 0,
+        historyLoading: false,
+        selectedHistory: [],
+        historyFilters: { q: '', action: '', sender: '' },
 
         // WebSocket
         ws: null,
         wsConnected: false,
+        _wsTimer: null,
+        _pollTimer: null,
+        _refreshing: false,
+        _historyReq: 0,
 
         // Modals
         showPush: false,
@@ -865,10 +942,11 @@
         showNotifierChModal: false,
 
         // Forms
-        pushForm: { type: 'regular', id: '', title: '', content: '', level: 'info', sender: '', newSender: '' },
-        editRTForm: { id: '', title: '', content: '', level: 'info' },
-        sourceForm: { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', username: '', password: '',
-          _showTemplate: false, templateMode: 'json', tplTitleField: 'title', tplContentField: 'content', tplIdField: 'id', tplSenderField: 'sender', tplLevelField: 'level', tplDefaultTitle: '通知' },
+        pushForm: { type: 'regular', id: '', title: '', content: '', sender: '', newSender: '' },
+        pushError: '',
+        editRTForm: { id: '', title: '', content: '' },
+        sourceForm: { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', senderFromTopic: 'off', username: '', password: '',
+          _showTemplate: false, templateMode: 'json', tplTitleField: 'title', tplContentField: 'content', tplIdField: 'id', tplSenderField: 'sender', tplDefaultTitle: '通知' },
         groupForm: { _edit: null, name: '', description: '', enabled: true },
         channelForm: { _edit: null, name: '', type: 'api', enabled: true, url: '', method: 'POST', headersStr: '', bodyTemplate: '', broker: '', port: '1883', topic: '', username: '', password: '' },
         groupChSource: null,
@@ -882,7 +960,15 @@
         },
         async _fetch(url, opts = {}) {
           if (!opts.headers) opts.headers = this._headers();
-          const resp = await fetch(url, opts);
+          // Never let a slow/hung request block the UI indefinitely.
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 15000);
+          let resp;
+          try {
+            resp = await fetch(url, { ...opts, signal: ctrl.signal });
+          } finally {
+            clearTimeout(timer);
+          }
           if (resp.status === 401) {
             this.authenticated = false;
             this.token = '';
@@ -908,7 +994,8 @@
               this.authenticated = true;
               this.loginToken = '';
               this.connectWS();
-              this.refresh();
+              await this.refresh();
+              this.startPolling();
             } else {
               this.loginError = '令牌无效';
             }
@@ -917,38 +1004,65 @@
           }
         },
         doLogout() {
+          // Flip the flag first so onclose() does not schedule a reconnect.
           this.authenticated = false;
           this.token = '';
           localStorage.removeItem('nm-token');
-          if (this.ws) { this.ws.close(); this.ws = null; }
+          clearTimeout(this._wsTimer);
+          clearInterval(this._pollTimer);
+          this._pollTimer = null;
+          if (this.ws) {
+            this.ws.onclose = null;
+            try { this.ws.close(); } catch (e) {}
+            this.ws = null;
+          }
+          this.wsConnected = false;
         },
 
         // ── Init ───────────────────────────────────────────────
         init() {
+          const boot = document.getElementById('boot-splash');
+          if (boot) boot.remove();
+
           const saved = localStorage.getItem('nm-theme');
           this.dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
           this.applyTheme();
-          // Check saved token
+
           const savedToken = localStorage.getItem('nm-token');
-          if (savedToken) {
-            this.token = savedToken;
-            // Verify token is still valid
-            fetch('/api/auth/verify', {
+          if (!savedToken) return;
+          this.token = savedToken;
+          this.verifyAndStart();
+        },
+
+        async verifyAndStart() {
+          try {
+            const resp = await this._fetch('/api/auth/verify', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ token: this.token }),
-            }).then(r => {
-              if (r.ok) {
-                this.authenticated = true;
-                this.connectWS();
-                this.refresh();
-                setInterval(() => this.refresh(), 10000);
-              } else {
-                localStorage.removeItem('nm-token');
-                this.token = '';
-              }
-            }).catch(() => {});
+            });
+            if (!resp.ok) {
+              localStorage.removeItem('nm-token');
+              this.token = '';
+              return;
+            }
+            this.authenticated = true;
+            this.connectWS();
+            await this.refresh();
+            this.startPolling();
+          } catch (e) {
+            // 401 already cleared the token; a network error keeps us on the
+            // login screen instead of hanging.
+            if (this.token) this.loginError = '无法连接到服务器';
           }
+        },
+
+        startPolling() {
+          clearInterval(this._pollTimer);
+          this._pollTimer = setInterval(() => {
+            // Skip while hidden or when a previous round is still in flight.
+            if (!this.authenticated || document.hidden || this._refreshing) return;
+            this.refresh();
+          }, 10000);
         },
 
         toggleTheme() {
@@ -960,15 +1074,33 @@
 
         // ── WebSocket ─────────────────────────────────────────
         connectWS() {
+          // Never connect without credentials: an unauthenticated socket gets
+          // closed by the server immediately and would loop forever.
+          if (!this.authenticated || !this.token) return;
+
+          if (this.ws) {
+            this.ws.onclose = null;
+            try { this.ws.close(); } catch (e) {}
+            this.ws = null;
+          }
+
           const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-          this.ws = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(this.token)}`);
-          this.ws.onopen = () => { this.wsConnected = true; };
-          this.ws.onclose = () => {
+          const ws = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(this.token)}`);
+          this.ws = ws;
+
+          ws.onopen = () => { this.wsConnected = true; };
+          ws.onerror = () => { try { ws.close(); } catch (e) {} };
+          ws.onclose = (ev) => {
             this.wsConnected = false;
-            setTimeout(() => this.connectWS(), 3000);
+            if (this.ws !== ws) return;                        // superseded by a newer socket
+            if (ev && ev.code === 4001) { this.doLogout(); return; }  // bad token: stop retrying
+            if (!this.authenticated || !this.token) return;    // logged out
+            clearTimeout(this._wsTimer);
+            this._wsTimer = setTimeout(() => this.connectWS(), 3000);
           };
-          this.ws.onmessage = (e) => {
-            const d = JSON.parse(e.data);
+          ws.onmessage = (e) => {
+            let d;
+            try { d = JSON.parse(e.data); } catch (err) { return; }
             if (d.type === 'ping') return;
             if (d.type === 'realtime_update') {
               const idx = this.realtimeNotifs.findIndex(n => n.id === d.notification_id);
@@ -976,7 +1108,6 @@
                 id: d.notification_id,
                 title: d.title,
                 content: d.content,
-                level: d.level,
                 extra: d.extra || {},
                 updated_at: d.timestamp,
                 source_id: null,
@@ -999,6 +1130,10 @@
 
         // ── Refresh ───────────────────────────────────────────
         async refresh() {
+          // Note: concurrent calls are allowed on purpose. An explicit refresh
+          // (after a push, on tab switch) must never be dropped just because a
+          // background poll happens to be in flight; the poll itself guards.
+          this._refreshing = true;
           try {
             const [rt, src, grp, ch, nt] = await Promise.all([
               this._fetch('/api/notifications/realtime').then(r => r.json()),
@@ -1012,24 +1147,125 @@
             if (grp.ok) this.groups = grp.data;
             if (ch.ok) this.channels = ch.data;
             if (nt.ok) this.notifiers = nt.data;
-          } catch (e) { /* ignore */ }
+          } catch (e) {
+            /* ignore */
+          } finally {
+            this._refreshing = false;
+          }
         },
 
         async loadHistory() {
+          // Guard against out-of-order responses when filters change quickly.
+          this._historyReq = (this._historyReq || 0) + 1;
+          const req = this._historyReq;
+          this.historyLoading = true;
           try {
-            const r = await this._fetch('/api/history?limit=200');
+            const p = new URLSearchParams({ limit: '500' });
+            const f = this.historyFilters;
+            if (f.q.trim()) p.set('q', f.q.trim());
+            if (f.action) p.set('action', f.action);
+            if (f.sender) p.set('sender', f.sender);
+            const r = await this._fetch('/api/history?' + p.toString());
             const j = await r.json();
-            if (j.ok) this.history = j.data;
-          } catch (e) {}
+            if (req !== this._historyReq) return;   // superseded by a newer request
+            if (j.ok) {
+              this.history = j.data;
+              this.historyTotal = j.total ?? j.data.length;
+              // Drop selections that are no longer visible
+              const visible = new Set(j.data.map(h => h.id));
+              this.selectedHistory = this.selectedHistory.filter(id => visible.has(id));
+            }
+          } catch (e) {
+            /* ignore */
+          } finally {
+            if (req === this._historyReq) this.historyLoading = false;
+          }
+        },
+
+        historyHasFilters() {
+          const f = this.historyFilters;
+          return !!(f.q.trim() || f.action || f.sender);
+        },
+        resetHistoryFilters() {
+          this.historyFilters = { q: '', action: '', sender: '' };
+          this.selectedHistory = [];
+          this.loadHistory();
+        },
+        historyAllSelected() {
+          return this.history.length > 0 && this.history.every(h => this.selectedHistory.includes(h.id));
+        },
+        toggleSelectAll() {
+          this.selectedHistory = this.historyAllSelected() ? [] : this.history.map(h => h.id);
+        },
+        async deleteSelectedHistory() {
+          if (this.selectedHistory.length === 0) return;
+          if (!confirm(`确定删除选中的 ${this.selectedHistory.length} 条历史记录？`)) return;
+          await this._fetch('/api/history', {
+            method: 'DELETE',
+            body: JSON.stringify({ ids: this.selectedHistory }),
+          });
+          this.selectedHistory = [];
+          await this.loadHistory();
+        },
+        async deleteHistoryEntry(id) {
+          if (!confirm('确定删除这条历史记录？')) return;
+          await this._fetch(`/api/history/${id}`, { method: 'DELETE' });
+          this.selectedHistory = this.selectedHistory.filter(x => x !== id);
+          await this.loadHistory();
+        },
+
+        // Group history into day buckets for the timeline
+        get historyGroups() {
+          const groups = [];
+          const byLabel = new Map();
+          for (const h of this.history) {
+            const label = this.dayKey(h.created_at);
+            if (!byLabel.has(label)) {
+              const bucket = { label, items: [] };
+              byLabel.set(label, bucket);
+              groups.push(bucket);
+            }
+            byLabel.get(label).items.push(h);
+          }
+          return groups;
+        },
+        dayKey(iso) {
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return '未知时间';
+          const sameDay = (a, b) =>
+            a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+          const today = new Date();
+          if (sameDay(d, today)) return '今天';
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          if (sameDay(d, yesterday)) return '昨天';
+          return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        },
+
+        // Navigate between sidebar sections
+        go(id) {
+          this.currentTab = id;
+          this.navOpen = false;
+          // Pull fresh data for lists that are derived from history/state.
+          if (id === 'history') this.loadHistory();
+          else if (id === 'notifiers' || id === 'sources' || id === 'groups' || id === 'channels') this.refresh();
+        },
+
+        async openPush() {
+          // Always refresh first: a notifier created by another client (MQTT,
+          // CLI, MCP) must show up in the dropdown immediately.
+          this.pushError = '';
+          await this.refresh();
+          this.showPush = true;
         },
 
         // ── Push ──────────────────────────────────────────────
         async doPush() {
           if (!this.pushForm.title) return;
+          this.pushError = '';
           const payload = {
             title: this.pushForm.title,
             content: this.pushForm.content,
-            level: this.pushForm.level,
           };
           // A manually typed sender wins over the dropdown selection; empty
           // sender means "no notifier" → default group.
@@ -1037,27 +1273,39 @@
           if (sender) {
             payload.sender = sender;
           }
-          if (this.pushForm.type === 'realtime') {
-            if (!this.pushForm.id) return;
-            payload.id = this.pushForm.id;
-            await this._fetch('/api/notifications/realtime', {
-              method: 'POST',
-              body: JSON.stringify(payload),
-            });
-          } else {
-            await this._fetch('/api/notifications/push', {
-              method: 'POST',
-              body: JSON.stringify(payload),
-            });
+          try {
+            let resp;
+            if (this.pushForm.type === 'realtime') {
+              if (!this.pushForm.id) { this.pushError = '实时通知需要填写 ID'; return; }
+              payload.id = this.pushForm.id;
+              resp = await this._fetch('/api/notifications/realtime', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+              });
+            } else {
+              resp = await this._fetch('/api/notifications/push', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+              });
+            }
+            if (!resp.ok) {
+              let detail = '';
+              try { detail = (await resp.json()).detail || ''; } catch (e) {}
+              this.pushError = `推送失败 (HTTP ${resp.status})${detail ? '：' + detail : ''}`;
+              return;
+            }
+          } catch (e) {
+            this.pushError = '推送失败：无法连接到服务器';
+            return;
           }
           this.showPush = false;
-          this.pushForm = { type: 'regular', id: '', title: '', content: '', level: 'info', sender: '', newSender: '' };
+          this.pushForm = { type: 'regular', id: '', title: '', content: '', sender: '', newSender: '' };
           await this.refresh();
         },
 
         // ── Edit Realtime ─────────────────────────────────────
         editRealtime(n) {
-          this.editRTForm = { id: n.id, title: n.title, content: n.content, level: n.level };
+          this.editRTForm = { id: n.id, title: n.title, content: n.content };
           this.showEditRT = true;
         },
         async doEditRT() {
@@ -1066,7 +1314,6 @@
             body: JSON.stringify({
               title: this.editRTForm.title,
               content: this.editRTForm.content,
-              level: this.editRTForm.level,
             }),
           });
           this.showEditRT = false;
@@ -1083,8 +1330,8 @@
 
         // ── Source CRUD ───────────────────────────────────────
         resetSourceForm() {
-          this.sourceForm = { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', username: '', password: '',
-            _showTemplate: false, templateMode: 'json', tplTitleField: 'title', tplContentField: 'content', tplIdField: 'id', tplSenderField: 'sender', tplLevelField: 'level', tplDefaultTitle: '通知' };
+          this.sourceForm = { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', senderFromTopic: 'off', username: '', password: '',
+            _showTemplate: false, templateMode: 'json', tplTitleField: 'title', tplContentField: 'content', tplIdField: 'id', tplSenderField: 'sender', tplDefaultTitle: '通知' };
         },
         editSource(s) {
           const tpl = s.config.template || {};
@@ -1096,6 +1343,7 @@
             broker: s.config.broker || '',
             port: String(s.config.port || '1883'),
             topic: s.config.topic || '',
+            senderFromTopic: s.config.sender_from_topic || 'off',
             username: s.config.username || '',
             password: s.config.password || '',
             _showTemplate: !!s.config.template,
@@ -1104,7 +1352,6 @@
             tplContentField: tpl.content_field || 'content',
             tplIdField: tpl.id_field || 'id',
             tplSenderField: tpl.sender_field || 'sender',
-            tplLevelField: tpl.level_field || 'level',
             tplDefaultTitle: tpl.default_title || '通知',
           };
           this.showSourceForm = true;
@@ -1115,6 +1362,7 @@
             cfg.broker = this.sourceForm.broker || 'localhost';
             cfg.port = parseInt(this.sourceForm.port) || 1883;
             cfg.topic = this.sourceForm.topic || '#';
+            cfg.sender_from_topic = this.sourceForm.senderFromTopic || 'off';
             if (this.sourceForm.username) cfg.username = this.sourceForm.username;
             if (this.sourceForm.password) cfg.password = this.sourceForm.password;
           }
@@ -1126,7 +1374,6 @@
               if (this.sourceForm.tplContentField) tpl.content_field = this.sourceForm.tplContentField;
               if (this.sourceForm.tplIdField) tpl.id_field = this.sourceForm.tplIdField;
               if (this.sourceForm.tplSenderField) tpl.sender_field = this.sourceForm.tplSenderField;
-              if (this.sourceForm.tplLevelField) tpl.level_field = this.sourceForm.tplLevelField;
             } else {
               if (this.sourceForm.tplSenderField) tpl.sender_field = this.sourceForm.tplSenderField;
             }
@@ -1308,9 +1555,6 @@
         async setDefault(id) {
           await this._fetch(`/api/groups/${id}/default`, { method: 'PUT' });
           await this.refresh();
-        },
-        levelText(l) {
-          return { info:'信息', warning:'警告', error:'错误', success:'成功' }[l] || l;
         },
         actionText(a) {
           return { created:'创建', updated:'更新', cleared:'清除', pushed:'推送' }[a] || a;

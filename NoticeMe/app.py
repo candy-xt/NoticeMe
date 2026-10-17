@@ -253,14 +253,13 @@ def _register_routes(app: FastAPI) -> None:
         content = body.get("content", "")
         if not title:
             raise HTTPException(400, "title is required")
-        level = body.get("level", "info")
         source_id = body.get("source_id")
         group_ids = body.get("group_ids")
         channel_ids = body.get("channel_ids")
         sender = body.get("sender", "")
         extra = body.get("extra", {})
         notif = await manager.push_realtime(
-            nid, title, content, level, source_id, extra,
+            nid, title, content, source_id, extra,
             group_ids=group_ids, channel_ids=channel_ids, sender=sender,
         )
         return {"ok": True, "data": notif.model_dump()}
@@ -289,14 +288,13 @@ def _register_routes(app: FastAPI) -> None:
         content = body.get("content", "")
         if not title:
             raise HTTPException(400, "title is required")
-        level = body.get("level", "info")
         source_id = body.get("source_id")
         group_ids = body.get("group_ids")
         channel_ids = body.get("channel_ids")
         sender = body.get("sender", "")
         extra = body.get("extra", {})
         results = await manager.push_regular(
-            title, content, level, source_id, extra,
+            title, content, source_id, extra,
             group_ids=group_ids, channel_ids=channel_ids, sender=sender,
         )
         return {"ok": True, "data": [r.model_dump() for r in results]}
@@ -324,9 +322,36 @@ def _register_routes(app: FastAPI) -> None:
     async def api_list_history(
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0),
+        action: str | None = None,
+        source_id: str | None = None,
+        sender: str | None = None,
+        q: str | None = None,
     ):
-        entries = manager.list_history(limit, offset)
-        return {"ok": True, "data": [e.model_dump() for e in entries]}
+        entries = manager.list_history(limit, offset, action, source_id, sender, q)
+        total = manager.count_history(action, source_id, sender, q)
+        return {
+            "ok": True,
+            "data": [e.model_dump() for e in entries],
+            "total": total,
+        }
+
+    @app.delete("/api/history")
+    async def api_delete_history(body: dict[str, Any]):
+        """Delete selected history entries. Body: {"ids": [1, 2, 3]}."""
+        ids = body.get("ids") or []
+        if not isinstance(ids, list):
+            raise HTTPException(400, "ids must be a list")
+        if not ids:
+            raise HTTPException(400, "ids is required")
+        deleted = manager.delete_history(ids)
+        return {"ok": True, "data": {"deleted": deleted}}
+
+    @app.delete("/api/history/{entry_id}")
+    async def api_delete_history_entry(entry_id: int):
+        deleted = manager.delete_history([entry_id])
+        if not deleted:
+            raise HTTPException(404, "History entry not found")
+        return {"ok": True, "data": {"deleted": deleted}}
 
     @app.get("/api/history/{notification_id}")
     async def api_notification_history(notification_id: str):
@@ -365,15 +390,33 @@ def _register_routes(app: FastAPI) -> None:
                     "notification_id": notif.id,
                     "title": notif.title,
                     "content": notif.content,
-                    "level": notif.level,
                     "extra": notif.extra,
                     "timestamp": notif.updated_at,
                 })
             while True:
-                try:
-                    event: WSEvent = await asyncio.wait_for(queue.get(), timeout=30)
+                # Race the outbound queue against the inbound socket: without
+                # reading the socket we never notice a disconnect, which makes
+                # uvicorn wait ~30s on shutdown ("Waiting for background
+                # tasks to complete").
+                recv_task = asyncio.create_task(websocket.receive())
+                get_task = asyncio.create_task(queue.get())
+                done, pending = await asyncio.wait(
+                    {recv_task, get_task},
+                    timeout=30,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in pending:
+                    task.cancel()
+
+                if recv_task in done:
+                    msg = recv_task.result()
+                    if msg.get("type") == "websocket.disconnect":
+                        break
+
+                if get_task in done:
+                    event: WSEvent = get_task.result()
                     await websocket.send_json(event.model_dump(exclude_none=True))
-                except asyncio.TimeoutError:
+                elif not done:
                     await websocket.send_json({"type": "ping"})
         except (WebSocketDisconnect, Exception):
             pass

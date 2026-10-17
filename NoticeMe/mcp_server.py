@@ -117,7 +117,6 @@ TOOLS: list[types.Tool] = [
                 "id": {"type": "string", "description": "Unique notification ID"},
                 "title": {"type": "string"},
                 "content": {"type": "string", "default": ""},
-                "level": {"type": "string", "enum": ["info", "success", "warning", "error"], "default": "info"},
                 "source_id": {"type": "string", "description": "Optional source ID (recorded as origin)"},
                 "group_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to these group IDs (overrides sender_id routing)"},
                 "channel_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to these channel IDs directly (overrides sender_id routing)"},
@@ -136,7 +135,6 @@ TOOLS: list[types.Tool] = [
                 "id": {"type": "string"},
                 "title": {"type": "string"},
                 "content": {"type": "string"},
-                "level": {"type": "string", "enum": ["info", "success", "warning", "error"]},
                 "extra": {"type": "object"},
             },
             "required": ["id"],
@@ -159,7 +157,6 @@ TOOLS: list[types.Tool] = [
             "properties": {
                 "title": {"type": "string"},
                 "content": {"type": "string", "default": ""},
-                "level": {"type": "string", "enum": ["info", "success", "warning", "error"], "default": "info"},
                 "source_id": {"type": "string", "description": "Optional source ID (recorded as origin)"},
                 "group_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to these group IDs (overrides sender_id routing)"},
                 "channel_ids": {"type": "array", "items": {"type": "string"}, "description": "Push to these channel IDs directly (overrides sender_id routing)"},
@@ -245,7 +242,7 @@ async def _dispatch(name: str, args: dict[str, Any]) -> Any:
         try:
             notif = await mgr.push_realtime(
                 notification_id=args["id"], title=args["title"],
-                content=args.get("content", ""), level=args.get("level", "info"),
+                content=args.get("content", ""),
                 source_id=args.get("source_id"), extra=args.get("extra"),
                 group_ids=args.get("group_ids"), channel_ids=args.get("channel_ids"),
                 sender=args.get("sender_id", ""),
@@ -256,7 +253,7 @@ async def _dispatch(name: str, args: dict[str, Any]) -> Any:
     if name == "update_realtime_notification":
         mgr = await _get_manager()
         try:
-            data = RealtimeUpdate(title=args.get("title"), content=args.get("content"), level=args.get("level"), extra=args.get("extra"))
+            data = RealtimeUpdate(title=args.get("title"), content=args.get("content"), extra=args.get("extra"))
             notif = await mgr.update_realtime(args["id"], data)
             if not notif:
                 return {"error": f"Notification '{args['id']}' not found"}
@@ -274,7 +271,7 @@ async def _dispatch(name: str, args: dict[str, Any]) -> Any:
         try:
             results = await mgr.push_regular(
                 title=args["title"], content=args.get("content", ""),
-                level=args.get("level", "info"), source_id=args.get("source_id"),
+                source_id=args.get("source_id"),
                 group_ids=args.get("group_ids"), channel_ids=args.get("channel_ids"),
                 sender=args.get("sender_id", ""),
             )

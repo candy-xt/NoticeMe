@@ -40,7 +40,6 @@ class ChannelManager:
         channel: ChannelInfo,
         title: str,
         content: str,
-        level: str = "info",
         extra: Optional[dict[str, Any]] = None,
     ) -> PushResult:
         """Push a notification to a channel."""
@@ -49,9 +48,9 @@ class ChannelManager:
 
         try:
             if channel.type == ChannelType.MQTT:
-                return await self._push_mqtt(channel, title, content, level, extra)
+                return await self._push_mqtt(channel, title, content, extra)
             elif channel.type == ChannelType.API:
-                return await self._push_api(channel, title, content, level, extra)
+                return await self._push_api(channel, title, content, extra)
             else:
                 return PushResult(ok=False, channel=channel.name, detail="Unknown channel type")
         except Exception as e:
@@ -63,7 +62,6 @@ class ChannelManager:
         channel: ChannelInfo,
         title: str,
         content: str,
-        level: str,
         extra: Optional[dict[str, Any]],
     ) -> PushResult:
         import aiomqtt
@@ -78,7 +76,6 @@ class ChannelManager:
         payload = json.dumps({
             "title": title,
             "content": content,
-            "level": level,
             "extra": extra or {},
         }, ensure_ascii=False)
 
@@ -99,7 +96,6 @@ class ChannelManager:
         channel: ChannelInfo,
         title: str,
         content: str,
-        level: str,
         extra: Optional[dict[str, Any]],
     ) -> PushResult:
         if not self._http:
@@ -118,7 +114,6 @@ class ChannelManager:
             # Simple template substitution
             body_str = body_template.replace("{{title}}", title)
             body_str = body_str.replace("{{content}}", content)
-            body_str = body_str.replace("{{level}}", level)
             try:
                 body = json.loads(body_str)
             except json.JSONDecodeError:
@@ -127,7 +122,6 @@ class ChannelManager:
             body = {
                 "title": title,
                 "content": content,
-                "level": level,
                 "extra": extra or {},
             }
 
