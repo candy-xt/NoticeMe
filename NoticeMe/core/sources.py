@@ -27,37 +27,45 @@ def apply_template(
     - sender_field: key name for sender_id
     - default_title: fallback title
 
-    Sender fallback (source.config.sender_from_topic):
-    - "off" (default): only the payload provides the sender
-    - "topic": use the MQTT topic as the sender
-    - "last": use the last topic segment (e.g. ``noticeme/NodeRED`` → ``NodeRED``)
+    Sender fallback (highest priority first):
+    1. payload fields (sender_field / sender / sender_id)
+    2. source.config.sender_from_topic ("topic" | "last")
+    3. source.config.sender (fixed sender)
+    4. source.name — a source *is* its publisher's identity, so an MQTT feed
+       that never carries a sender field still maps to its notifier
 
     Returns a normalized dict with: title, content, id (optional), extra.sender_id
     """
     result = _apply_template(source, raw_payload)
-    return _apply_topic_sender(source, result, topic)
+    return _apply_sender_fallback(source, result, topic)
 
 
-def _apply_topic_sender(
+def _apply_sender_fallback(
     source: SourceInfo, result: dict[str, Any], topic: Optional[str]
 ) -> dict[str, Any]:
-    """Fill in the sender from the MQTT topic when the payload has none."""
-    if not topic:
-        return result
+    """Fill in the sender when the payload does not carry one."""
     if result.get("sender") or result.get("sender_id"):
         return result
     if (result.get("extra") or {}).get("sender_id"):
         return result
 
+    sender = ""
     mode = source.config.get("sender_from_topic", "off")
-    if mode == "topic":
+    if topic and mode == "topic":
         sender = topic
-    elif mode == "last":
+    elif topic and mode == "last":
         sender = topic.rstrip("/").rsplit("/", 1)[-1]
-    else:
-        return result
 
-    sender = str(sender).strip()
+    if not sender:
+        sender = str(source.config.get("sender") or "")
+
+    # A source is the publisher identity in NoticeMe, so its name is the last
+    # resort. This is what makes "remove the fixed sender" still route to the
+    # notifier that has the same name.
+    if not sender:
+        sender = str(source.name or "")
+
+    sender = sender.strip()
     if not sender:
         return result
 
@@ -229,8 +237,19 @@ class SourceManager:
                         # Apply template to normalize payload (topic is used as a
                         # last-resort sender when configured).
                         normalized = apply_template(source, raw, topic=topic)
-                        logger.debug("MQTT %s topic=%s sender=%r",
-                                     source.id, topic, (normalized.get("extra") or {}).get("sender_id"))
+                        sender_seen = (
+                            normalized.get("sender")
+                            or normalized.get("sender_id")
+                            or (normalized.get("extra") or {}).get("sender_id")
+                            or ""
+                        )
+                        if not sender_seen:
+                            # Most useful diagnostic: show exactly what arrived so
+                            # a missing/misnamed sender field is obvious.
+                            logger.warning(
+                                "MQTT %s: no sender found (topic=%s, payload=%r)",
+                                source.id, topic, raw,
+                            )
                         if self.on_receive:
                             self.on_receive(source.id, normalized)
             except asyncio.CancelledError:

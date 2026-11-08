@@ -104,7 +104,7 @@
       <div class="flex items-center gap-2.5 px-4 h-14 flex-shrink-0 border-b border-lsurface-3 dark:border-surface-3">
         <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm flex-shrink-0">N</div>
         <span class="font-semibold text-gray-900 dark:text-white tracking-tight">NoticeMe</span>
-        <span class="text-[11px] text-gray-400 ml-auto">v0.3.1</span>
+        <span class="text-[11px] text-gray-400 ml-auto">v0.3.2</span>
       </div>
 
       <!-- Nav -->
@@ -654,6 +654,11 @@
             </select>
           </div>
           <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">固定发送者 <span class="text-gray-400 dark:text-gray-600">（可选，优先级最低）</span></label>
+            <input x-model="sourceForm.fixedSender" placeholder="如 NodeRED" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
+            <p class="text-[11px] text-gray-400 dark:text-gray-600 mt-1">优先级：消息里的 sender &gt; 主题 &gt; 这里 &gt; 源名称（留空即用源名称）</p>
+          </div>
+          <div>
             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">用户名（可选）</label>
             <input x-model="sourceForm.username" class="w-full bg-lsurface dark:bg-surface border border-lsurface-3 dark:border-surface-3 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white mono placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-accent transition-colors">
           </div>
@@ -945,7 +950,7 @@
         pushForm: { type: 'regular', id: '', title: '', content: '', sender: '', newSender: '' },
         pushError: '',
         editRTForm: { id: '', title: '', content: '' },
-        sourceForm: { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', senderFromTopic: 'off', username: '', password: '',
+        sourceForm: { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', senderFromTopic: 'off', fixedSender: '', username: '', password: '',
           _showTemplate: false, templateMode: 'json', tplTitleField: 'title', tplContentField: 'content', tplIdField: 'id', tplSenderField: 'sender', tplDefaultTitle: '通知' },
         groupForm: { _edit: null, name: '', description: '', enabled: true },
         channelForm: { _edit: null, name: '', type: 'api', enabled: true, url: '', method: 'POST', headersStr: '', bodyTemplate: '', broker: '', port: '1883', topic: '', username: '', password: '' },
@@ -1330,7 +1335,7 @@
 
         // ── Source CRUD ───────────────────────────────────────
         resetSourceForm() {
-          this.sourceForm = { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', senderFromTopic: 'off', username: '', password: '',
+          this.sourceForm = { _edit: null, name: '', type: 'webhook', enabled: true, broker: '', port: '1883', topic: '', senderFromTopic: 'off', fixedSender: '', username: '', password: '',
             _showTemplate: false, templateMode: 'json', tplTitleField: 'title', tplContentField: 'content', tplIdField: 'id', tplSenderField: 'sender', tplDefaultTitle: '通知' };
         },
         editSource(s) {
@@ -1344,6 +1349,7 @@
             port: String(s.config.port || '1883'),
             topic: s.config.topic || '',
             senderFromTopic: s.config.sender_from_topic || 'off',
+            fixedSender: s.config.sender || '',
             username: s.config.username || '',
             password: s.config.password || '',
             _showTemplate: !!s.config.template,
@@ -1363,6 +1369,7 @@
             cfg.port = parseInt(this.sourceForm.port) || 1883;
             cfg.topic = this.sourceForm.topic || '#';
             cfg.sender_from_topic = this.sourceForm.senderFromTopic || 'off';
+            if (this.sourceForm.fixedSender) cfg.sender = this.sourceForm.fixedSender;
             if (this.sourceForm.username) cfg.username = this.sourceForm.username;
             if (this.sourceForm.password) cfg.password = this.sourceForm.password;
           }
